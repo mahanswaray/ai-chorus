@@ -7,6 +7,9 @@ AI Chorus is for YOU.
 
 A locally running application that listens to Slack messages (including audio), transcribes them, and submits the text to ChatGPT, Claude, and Gemini web UIs using Playwright. Posts back links and screenshots to Slack.
 
+** IMPORTANT NOTE ** 
+This is WIP project and currently is using a local deployment. Still figuring out how to do this remotely
+
 <p float="left">
   <img src="https://github.com/user-attachments/assets/2d22fbe9-3dae-482f-a8f6-8c0b46579e30" width="45%" alt="Screenshot 1" />
   <img src="https://github.com/user-attachments/assets/bd578c26-f339-4bc2-a225-c792deb0cc86" width="45%" alt="Screenshot 2" />
