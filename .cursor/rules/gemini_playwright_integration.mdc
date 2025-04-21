@@ -12,9 +12,11 @@ alwaysApply: false
 The sequence for submitting a prompt via Playwright to a logged-in Gemini instance is:
 
 1.  **Connect & Find Page:** Connect to the browser via CDP and locate the correct page object whose URL contains `gemini.google.com`.
-2.  **Ensure New Chat State:**
-    *   Check if the "New chat" button is visible and enabled. If so, click it to handle cases where a previous chat might be active.
-    *   Wait for the main text input area to become visible after potentially clicking "New chat" (or upon initial load).
+2.  **Ensure New Chat State (Robust Handling):**
+    *   Attempt to find the "New chat" button (`expandable-button[data-test-id="new-chat-button"] button:not([disabled])`) with a short timeout (e.g., 5 seconds).
+    *   **If found and visible:** Click it to ensure a clean state, handling cases where a previous chat might be active.
+    *   **If *not* found (timeout occurs):** Assume the page is *already* in the new chat state (common on initial load). Gracefully handle the `TimeoutError` and proceed.
+    *   In either case, wait for the main text input area to become visible before proceeding.
 3.  **Enter Prompt:** Locate the main text input area (`div.ql-editor[role="textbox"]`) and fill it with the prompt text.
 4.  **Submit Prompt:**
     *   Locate the Submit button (`button[aria-label="Send message"]`).
@@ -51,4 +53,4 @@ The sequence for submitting a prompt via Playwright to a logged-in Gemini instan
 
 *   These selectors and logic should be implemented within functions in `app/playwright_handler.py`, likely an async function like `submit_prompt_gemini(page: Page, prompt: str) -> str | None`.
 *   Remember that the browser must be launched/connected via CDP with the correct debugging port, and the user must be logged in. Connection is handled via `p.chromium.connect_over_cdp(url)`.
-*   The "Ensure New Chat State" step is optional but recommended for robustness. Handle the `TimeoutError` gracefully if the button isn't found, assuming the page is already in the correct state.
+*   The "Ensure New Chat State" step uses a `try...except PlaywrightTimeoutError` block to make clicking the button optional and robust, handling both initial load states and subsequent runs where a chat might be active.

@@ -87,3 +87,39 @@ graph LR
 * **ngrok Exposure:** The ngrok tunnel exposes a local port. While Slack request signature verification adds a layer of security (ensuring requests come from Slack), the endpoint is technically public. Consider running ngrok only when needed. A paid ngrok plan can offer features like IP allowlisting.
 * **API Keys/Tokens:** Store API Keys (OpenAI) and Slack Tokens securely using environment variables loaded from a `.env` file (ensure `.env` is in `.gitignore`). Do not commit credentials.
 * **Browser Context Data:** The `user_data_dir` used by Playwright will contain sensitive session cookies. Ensure this directory is appropriately secured on the local machine and not committed to version control.
+
+## Slack Manifest 
+{
+    "display_information": {
+        "name": "ChorusAI"
+    },
+    "features": {
+        "bot_user": {
+            "display_name": "ChorusAI",
+            "always_online": false
+        }
+    },
+    "oauth_config": {
+        "scopes": {
+            "bot": [
+                "app_mentions:read",
+                "channels:history",
+                "chat:write",
+                "files:read",
+                "files:write",
+                "remote_files:write"
+            ]
+        }
+    },
+    "settings": {
+        "event_subscriptions": {
+            "request_url": "https://YOUR_NGROK/slack/events",
+            "bot_events": [
+                "message.channels"
+            ]
+        },
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
+    }
+}

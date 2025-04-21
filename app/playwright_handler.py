@@ -475,20 +475,34 @@ async def submit_prompt_gemini(
         try:
             logger.info(f"Checking for Gemini New Chat button: {GEMINI_NEW_CHAT_BUTTON_SELECTOR}")
             new_chat_button = page.locator(GEMINI_NEW_CHAT_BUTTON_SELECTOR)
-            await expect(new_chat_button).to_be_visible(timeout=5000) # Short timeout
-            logger.info("Gemini New Chat button visible and enabled. Clicking...")
-            await new_chat_button.click()
-            logger.info(f"Waiting for Gemini input area ({GEMINI_TEXT_INPUT_SELECTOR}) to be visible after ensuring new chat...")
-            await expect(page.locator(GEMINI_TEXT_INPUT_SELECTOR)).to_be_visible(timeout=10000)
-            logger.info("Gemini input area ready for new chat.")
-            await page.wait_for_timeout(500) # Small pause
-        except PlaywrightTimeoutError:
-            logger.info("Gemini New Chat button not found or not needed. Assuming current state is new chat ready.")
-            # Still wait for input area just in case
-            logger.info(f"Waiting for Gemini input area ({GEMINI_TEXT_INPUT_SELECTOR}) to be visible...")
-            await expect(page.locator(GEMINI_TEXT_INPUT_SELECTOR)).to_be_visible(timeout=10000)
-            logger.info("Gemini input area ready.")
-            await page.wait_for_timeout(500) # Small pause
+            # Try waiting for it briefly, but don't fail if it doesn't appear
+            try:
+                 await new_chat_button.wait_for(state='visible', timeout=1000) # Very short wait
+            except PlaywrightTimeoutError:
+                 pass # Ignore timeout
+
+            # Now check if it's actually visible *without* raising an error
+            if await new_chat_button.is_visible():
+                logger.info("Gemini New Chat button visible and enabled. Clicking...")
+                await new_chat_button.click()
+                logger.info(f"Waiting for Gemini input area ({GEMINI_TEXT_INPUT_SELECTOR}) to be visible after clicking new chat...")
+                await expect(page.locator(GEMINI_TEXT_INPUT_SELECTOR)).to_be_visible(timeout=10000)
+                logger.info("Gemini input area ready after new chat click.")
+            else:
+                logger.info("Gemini New Chat button not found or not visible. Assuming current state is new chat ready.")
+                # Still wait for input area to be ready in this case too
+                logger.info(f"Waiting for Gemini input area ({GEMINI_TEXT_INPUT_SELECTOR}) to be visible...")
+                await expect(page.locator(GEMINI_TEXT_INPUT_SELECTOR)).to_be_visible(timeout=10000)
+                logger.info("Gemini input area ready.")
+
+        except Exception as e_nc:
+             # Catch any other unexpected error during the new chat check
+             logger.error(f"Error during New Chat check: {e_nc}. Proceeding, assuming new chat state.", exc_info=True)
+             logger.info(f"Waiting for Gemini input area ({GEMINI_TEXT_INPUT_SELECTOR}) to be visible...")
+             await expect(page.locator(GEMINI_TEXT_INPUT_SELECTOR)).to_be_visible(timeout=10000)
+             logger.info("Gemini input area ready.")
+
+        await page.wait_for_timeout(500) # Small pause after ensuring state
 
         # 2. Locate and fill the input area
         logger.info(f"Locating Gemini input area: {GEMINI_TEXT_INPUT_SELECTOR}")

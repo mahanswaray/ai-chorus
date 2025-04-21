@@ -74,22 +74,35 @@ try:
             try:
                 print(f"Checking for New Chat button: {NEW_CHAT_BUTTON_SELECTOR}")
                 new_chat_button = page.locator(NEW_CHAT_BUTTON_SELECTOR)
-                # Use a short timeout, as it might not always be present/needed
-                expect(new_chat_button).to_be_visible(timeout=5000)
-                print("New Chat button visible and enabled. Clicking...")
-                new_chat_button.click()
-                # Wait for the input area to be ready after potentially clicking New Chat
-                print(f"Waiting for input area ({TEXT_INPUT_SELECTOR}) to be visible after ensuring new chat...")
-                expect(page.locator(TEXT_INPUT_SELECTOR)).to_be_visible(timeout=10000)
-                print("Input area ready for new chat.")
-                time.sleep(0.5) # Small pause
-            except PlaywrightTimeoutError:
-                print("New Chat button not found or not needed (or timed out). Assuming current state is new chat ready.")
-                # Still wait for input area just in case
+                # Try waiting for it briefly, but don't fail if it doesn't appear
+                try:
+                    new_chat_button.wait_for(state='visible', timeout=1000) # Very short wait
+                except PlaywrightTimeoutError:
+                    pass # Ignore timeout, just means it didn't appear quickly
+
+                # Now check if it's actually visible *without* raising an error
+                if new_chat_button.is_visible():
+                    print("New Chat button visible and enabled. Clicking...")
+                    new_chat_button.click()
+                    # Wait for the input area to be ready AFTER clicking New Chat
+                    print(f"Waiting for input area ({TEXT_INPUT_SELECTOR}) to be visible after clicking new chat...")
+                    expect(page.locator(TEXT_INPUT_SELECTOR)).to_be_visible(timeout=10000)
+                    print("Input area ready after new chat click.")
+                else:
+                    print("New Chat button not found or not visible. Assuming current state is new chat ready.")
+                    # Still wait for input area to be ready in this case too
+                    print(f"Waiting for input area ({TEXT_INPUT_SELECTOR}) to be visible...")
+                    expect(page.locator(TEXT_INPUT_SELECTOR)).to_be_visible(timeout=10000)
+                    print("Input area ready.")
+
+            except Exception as e_nc:
+                # Catch any other unexpected error during the new chat check
+                print(f"Error during New Chat check: {e_nc}. Proceeding, assuming new chat state.", file=sys.stderr)
                 print(f"Waiting for input area ({TEXT_INPUT_SELECTOR}) to be visible...")
                 expect(page.locator(TEXT_INPUT_SELECTOR)).to_be_visible(timeout=10000)
                 print("Input area ready.")
-                time.sleep(0.5) # Small pause
+
+            time.sleep(0.5) # Small pause after ensuring state
 
             # 2. Locate and fill the input area
             print(f"Locating input area: {TEXT_INPUT_SELECTOR}")

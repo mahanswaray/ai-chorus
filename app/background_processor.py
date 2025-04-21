@@ -123,7 +123,7 @@ async def process_message_event(event: Dict[str, Any]):
             chatgpt_attempts += 1
             try:
                 # TODO: Potentially parse user_text for flags like !model=gpt-4o or !search=on
-                chatgpt_url = await playwright_handler.submit_prompt_chatgpt(chatgpt_page, prompt_text, model_suffix='o4-mini', enable_search=True)
+                chatgpt_url = await playwright_handler.submit_prompt_chatgpt(chatgpt_page, prompt_text, model_suffix='gpt-4o', enable_search=True)
                 if chatgpt_url:
                     results['chatgpt_url'] = chatgpt_url
                     logger.info(f"ChatGPT submission successful on attempt {chatgpt_attempts}, URL: {chatgpt_url}")
