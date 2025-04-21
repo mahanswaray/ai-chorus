@@ -63,9 +63,9 @@ graph LR
     BackgroundTask -- Uses --> SlackSDK[slack_sdk];
     BackgroundTask -- Calls --> OpenAI_API[OpenAI Whisper API];
     BackgroundTask -- Controls --> Playwright[Playwright Library];
-    Playwright -- Manages --> ChromeChatGPT[Local Chrome (ChatGPT - Logged In)];
-    Playwright -- Manages --> ChromeClaude[Local Chrome (Claude - Logged In)];
-    Playwright -- Manages --> ChromeGemini[Local Chrome (Gemini - Logged In)];
+    Playwright -- Manages --> ChromeChatGPT[Local Chrome Context (ChatGPT - Logged In)];
+    Playwright -- Manages --> ChromeClaude[Local Chrome Context (Claude - Logged In)];
+    Playwright -- Manages --> ChromeGemini[Local Chrome Context (Gemini - Logged In)];
     SlackSDK -- Downloads Audio/Posts Reply --> Slack;
     ChromeChatGPT -- Interaction --> ChatGPT_Web[ChatGPT Web UI];
     ChromeClaude -- Interaction --> Claude_Web[Claude Web UI];
