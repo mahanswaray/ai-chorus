@@ -113,7 +113,7 @@ graph TD
 
 6.  **Configure Slack Event Subscription:**
     * Run `ngrok http 8000` temporarily in a separate terminal to get a public URL (e.g., `https://<random-string>.ngrok-free.app`). 
-    * Use the url for the following manifest and ceate a Slack App
+    * Use the url for the following manifest and create a Slack App
         ```json
         {
             "display_information": {
