@@ -192,10 +192,10 @@ This requires multiple persistent processes.
 
 *   **A. Launch AI Browser Instances:**
     *   Use the configured `start_ai_browsers.sh` script.
-    *   Open **three separate terminals**.
-    *   In terminal 1, run: `cd <project_dir> && ./start_ai_browsers.sh chatgpt`
-    *   In terminal 2, run: `cd <project_dir> && ./start_ai_browsers.sh claude`
-    *   In terminal 3, run: `cd <project_dir> && ./start_ai_browsers.sh gemini`
+    *   Run in terminal: `cd <project_dir> && ./start_ai_browsers.sh chatgpt`
+    *   Run in terminal: `cd <project_dir> && ./start_ai_browsers.sh claude`
+    *   Run in terminal: `cd <project_dir> && ./start_ai_browsers.sh gemini`
+    *   These will take a few seconds since it's copying the chrome user data directory.
     *   This will create temporary copies of your configured profile and launch separate Chrome instances for each service, connecting them to the debug ports defined in your `.env` file.
     *   **Keep these terminals/browsers running.**
 *   **B. Start the FastAPI Server:**
@@ -204,11 +204,7 @@ This requires multiple persistent processes.
     *   Activate the virtual environment: `source .venv/bin/activate`
     *   Start the server: `uvicorn app.main:app --reload --port 8000`
     *   Keep this terminal running. Watch for logs confirming connection to the debug ports.
-*   **C. Start ngrok:**
-    *   Open **another** terminal.
-    *   Expose port 8000: `ngrok http 8000`
-    *   **Note the HTTPS URL** provided by ngrok (it should match the one you used during Slack setup).
-
+    
 **3. Ready!**
 
 Your local server is running, connected to your logged-in browser instances, and accessible to Slack via ngrok. You can now proceed to [Usage](#usage).
