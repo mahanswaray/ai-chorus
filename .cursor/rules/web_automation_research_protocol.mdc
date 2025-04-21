@@ -1,0 +1,82 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Rule: Web Automation Research Protocol (AI-Human Collaboration)
+
+**Goal:** Define a repeatable, collaborative process between a human user and an AI assistant for investigating web application UIs, identifying reliable selectors, and developing Playwright automation scripts.
+
+**Context:** This protocol emerged from successfully automating interactions with the ChatGPT web UI (Epic 4) and aims to be generalizable to other websites and automation tasks.
+
+## Collaboration Phases & Roles
+
+This process is iterative, especially the Debugging phase.
+
+**Phase 1: Setup & Exploration**
+
+*   **Human:**
+    *   Clearly define the automation goal and the specific flow to be scripted.
+    *   Provide the AI with relevant context: existing codebase (if any), project documentation (like Epics, technical design), target website URL, access details (e.g., debugging ports if applicable).
+    *   Provide initial visual aids (screenshots of key UI states).
+*   **AI:**
+    *   Understand the goal and context. Ask clarifying questions.
+    *   Analyze provided context and screenshots to get an initial understanding of the UI flow and key elements.
+    *   Confirm the planned approach with the human.
+
+**Phase 2: Targeted DOM Analysis**
+
+*   **AI:**
+    *   Based on the goal, identify the key UI elements requiring interaction (inputs, buttons, dropdowns, state indicators, result containers).
+    *   Generate specific, granular prompts requesting detailed HTML information for *each* key element. The prompt should ask for:
+        *   Reliable CSS Selectors or XPath (prioritizing `id`, `data-testid`, `aria-label`, robust attributes over classes).
+        *   Tag Name.
+        *   Relevant attributes.
+        *   How different states (e.g., enabled/disabled, active/inactive, toggled on/off) are represented in the DOM (attribute changes, class changes).
+*   **Human:**
+    *   Use browser developer tools on the live target website to inspect the elements identified by the AI.
+    *   **Crucially, verify proposed selectors directly in the dev console.**
+    *   Execute the AI's prompt, extracting and providing the precise HTML details back to the AI. Capture HTML *in different states* if elements change significantly (e.g., a submit button changing its attributes/ID after text is entered).
+
+**Phase 3: Initial Scripting & Testing**
+
+*   **AI:**
+    *   Synthesize the detailed HTML analysis into a logical sequence of Playwright actions.
+    *   Generate simple, standalone test scripts (using `playwright.sync_api` can be effective for testing) implementing this sequence. Include necessary waits based on the state information gathered.
+*   **Human:**
+    *   Ensure the target environment (e.g., browser with debugging port open, logged-in state) is ready.
+    *   Execute the test scripts provided by the AI.
+
+**Phase 4: Collaborative Debugging Loop**
+
+*   **Human:**
+    *   If a script fails, provide the AI with the **complete error message and traceback**.
+    *   Describe the behavior observed (e.g., "it filled the text but failed to click submit").
+    *   If the failure suggests the DOM was different than expected, use dev tools *at the point of failure* to capture relevant HTML snippets and provide them to the AI.
+*   **AI:**
+    *   Analyze the error message and observed behavior.
+    *   Hypothesize the cause (e.g., incorrect selector, timing issue, element state change not accounted for, strict mode violation due to multiple elements).
+    *   If needed, request more specific HTML details based on the hypothesis.
+    *   Propose specific code modifications to the script (e.g., update selector, add/adjust `expect().to_be_visible()`, `expect().to_be_enabled()`, `expect().to_have_attribute()`, use `.first` or `.last` for non-unique selectors, adjust `page.wait_for_url()`).
+    *   Apply the fixes to the script.
+*   **(Repeat)** Human re-tests the modified script. This loop continues until the script executes the desired flow successfully.
+
+**Phase 5: Documentation & Consolidation**
+
+*   **AI:**
+    *   Once the script works reliably, consolidate all validated findings:
+        *   The exact sequence of UI steps.
+        *   Final, validated selectors for all key elements.
+        *   Required waiting strategies and nuance (e.g., using `.last`, checking `aria-pressed`).
+        *   Any necessary setup or environmental notes.
+    *   Structure this information into a dedicated rule or documentation file (like this one, or the `chatgpt_playwright_integration.mdc` rule).
+*   **Human:**
+    *   Review the consolidated documentation for accuracy and completeness.
+
+## Key Principles
+
+*   **Iterative Refinement:** Expect failures and treat them as learning opportunities. The debugging loop is central.
+*   **Clear Communication:** Human provides precise error details and context. AI explains its reasoning and proposed fixes.
+*   **Targeted Information:** AI requests specific HTML details rather than asking for large, unstructured dumps. Human provides focused answers.
+*   **Human Verification:** The human using dev tools is the ground truth for verifying selectors against the live application state.
+*   **Standalone Testing:** Use simple test scripts separate from the main application during the research phase for faster iteration.

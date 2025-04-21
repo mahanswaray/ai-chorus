@@ -1,0 +1,91 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Local Development & Running Guide
+
+This guide outlines how to set up your local environment to develop and run the Local Slack Audio to Multi-AI workflow.
+
+## 1. Prerequisites
+
+* **Python:** Version 3.11 or later installed.
+* **`uv`:** The Python package installer/resolver. Install via pip or standalone: `pip install uv` or follow official instructions.
+* **Git:** For cloning the repository.
+* **ngrok:** Download and install ngrok. You may need to sign up for an account (free tier is usually sufficient) and add your authtoken (`ngrok config add-authtoken <your_token>`).
+* **Playwright & Browsers:**
+    * Install the Playwright library: `uv pip install playwright`
+    * Install necessary browser binaries (especially Chromium): `playwright install --with-deps chromium`
+* **API Keys/Tokens:**
+    * OpenAI API Key.
+    * Slack Bot Token and App Signing Secret (from your Slack App configuration).
+
+## 2. Project Setup
+
+1.  **Clone Repository:**
+    ```bash
+    git clone <repository-url>
+    cd <repository-directory>
+    ```
+2.  **Set up Virtual Environment:**
+    ```bash
+    uv venv --python 3.11 .venv # Create environment
+    source .venv/bin/activate    # Activate (Linux/macOS)
+    # or .\.venv\Scripts\Activate.ps1 (PowerShell)
+    # or .venv\Scripts\activate.bat (Windows CMD)
+    ```
+3.  **Install Dependencies:**
+    ```bash
+    # Create requirements.txt including: fastapi, uvicorn[standard], playwright, openai, slack_sdk, python-dotenv, httpx (or requests)
+    uv pip install -r requirements.txt
+    ```
+4.  **Configure Environment Variables:**
+    * Create a `.env` file in the project root (ensure this file is in `.gitignore`).
+    * Add the following keys:
+        ```dotenv
+        SLACK_BOT_TOKEN=your_slack_bot_token
+        SLACK_SIGNING_SECRET=your_slack_signing_secret
+        OPENAI_API_KEY=your_openai_api_key
+        # Add any other configuration variables (e.g., target Slack channel ID, user_data_dir path for Playwright)
+        ```
+    * Your FastAPI application should load these using `python-dotenv`.
+
+## 3. Running the Application
+
+This *is* the deployment model.
+
+1.  **Start the FastAPI Server:**
+    ```bash
+    # Make sure your .venv is active
+    uvicorn app.main:app --reload --port 8000
+    # (Replace app.main:app with your actual file/app location)
+    ```
+    Keep this terminal window running. The server needs to launch and manage the persistent Playwright browser contexts (see Epic 3).
+2.  **Manual Browser Login:** When the server starts, it should launch Chrome/Chromium windows using Playwright's persistent context. **You must manually log into ChatGPT, Claude, and Gemini within these specific windows.** This only needs to be done once per server start (assuming the session/cookies remain valid).
+3.  **Start ngrok:** Open *another* terminal window.
+    ```bash
+    # Make sure your .venv is active if ngrok needs python wrappers, otherwise run directly
+    ngrok http 8000
+    # (Use the same port your FastAPI server is running on)
+    ```
+    ngrok will display a public HTTPS URL (e.g., `https://<random-string>.ngrok-free.app`). **Copy this HTTPS URL.**
+4.  **Configure Slack:**
+    * Go to your Slack App configuration page.
+    * Navigate to "Event Subscriptions".
+    * Paste the **ngrok HTTPS URL** (appending your specific API route, e.g., `/slack/events`) into the "Request URL" field. Slack will try to verify it. Your running FastAPI server needs to handle the `url_verification` challenge correctly.
+    * Ensure the app is subscribed to the necessary events (e.g., `message.channels` for any message in channels the bot is in).
+    * Reinstall the app to your workspace if needed after changing scopes or events.
+
+5.  **Test:** Send a message (or message with audio) to the designated Slack channel. The event should go Slack -> ngrok -> FastAPI -> Process -> Reply to Slack.
+
+## 4. Testing Strategy
+
+* **Unit Tests (`pytest`):** Test individual functions (e.g., transcript formatting, Slack payload parsing) using mocking for external dependencies (Slack SDK, OpenAI API).
+* **Integration Tests (`pytest`):** Test the flow within the FastAPI app, potentially mocking Playwright interactions initially. Test Slack request verification.
+* **End-to-End (Manual):** The primary testing method. Requires running FastAPI + ngrok + having manually logged into browsers. Send messages/audio via Slack and observe the behavior in the target web apps and the Slack reply. This is crucial for verifying Playwright scripts. Use Playwright's debugging tools (Inspector, Trace Viewer) heavily during development.
+
+## 5. Code Quality
+
+* **Linting:** Use tools like `ruff` or `flake8`.
+* **Formatting:** Use `black`.
+* Configure pre-commit hooks to automate these checks.

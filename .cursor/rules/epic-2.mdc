@@ -1,0 +1,37 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Epic 2: Implement Speech-to-Text (Local FastAPI)
+
+**Goal:** Enhance the local FastAPI server to detect audio files in Slack messages, download them, transcribe using OpenAI Whisper, and post the transcript back to the Slack thread.
+
+* **E2.T1:** **OpenAI API Key:** Add `OPENAI_API_KEY` to `.env`. **Ensure it's loaded and accessible via `app/config.py`.**
+* **E2.T2:** **Dependency:** Add `openai` client library to `requirements.txt` and install (`uv pip install -r requirements.txt`). Add `httpx` if not already present (needed by `openai` >= v1.0).
+* **E2.T3:** **Event Parsing (Files):** **Within the background task logic in `app/background_processor.py`** (or potentially a refined event parsing function in `app/slack_handler.py` called by the background task):
+    * Inspect the received `event` data for a `files` array.
+    * **Call a helper function (e.g., in `app/slack_handler.py`)** to identify the first audio file and extract its `url_private_download` and relevant metadata (like filename, mimetype).
+* **E2.T4:** **Audio Download:** **Implement an audio download function in `app/slack_handler.py`** (e.g., `download_slack_audio(url: str, token: str) -> bytes | None`).
+    * This function takes the `url_private_download` and the bot token (from config).
+    * It uses an HTTP client (`httpx`) with the token header to fetch the audio content.
+    * Returns the audio content as bytes or handles download errors (returning `None` or raising a specific exception).
+* **E2.T5:** **OpenAI Integration:** **Create `app/openai_handler.py`.**
+    * Initialize the `openai` client within this module, using the API key from `app/config.py`.
+    * Define a function for transcription (e.g., `transcribe_audio(audio_bytes: bytes, filename: str, mimetype: str) -> str | None`).
+* **E2.T6:** **STT Logic:** **Implement the transcription function in `app/openai_handler.py`.**
+    * It takes the audio bytes and filename/mimetype metadata.
+    * Creates a file-like object (`io.BytesIO`).
+    * Calls `openai_client.audio.transcriptions.create` with the `whisper-1` model.
+    * Returns the transcript text or handles API errors (returning `None` or raising).
+* **E2.T7:** **Update Background Task & Slack Response:** Modify the background task function in `app/background_processor.py`:
+    * After identifying an audio file URL (E2.T3), **call `slack_handler.download_slack_audio`**.
+    * If download succeeds, **call `openai_handler.transcribe_audio`**.
+    * Based on success/failure of transcription, **call an appropriate function in `app/slack_handler.py`** (e.g., `post_transcript_reply(channel_id, thread_ts, transcript)` or `post_error_reply(channel_id, thread_ts, error_message)`) to format and send the message back to the Slack thread.
+* **E2.T8:** **Testing:**
+    * Run server & ngrok.
+    * Post messages *with* audio files (.m4a, .mp3) to the Slack channel. Verify the transcript is posted back correctly in the thread.
+    * Post messages *without* audio. Verify the appropriate response.
+    * Test with large audio files (approaching 25MB).
+    * Test with non-audio files attached.
+    * Simulate OpenAI API errors (e.g., temporarily use a wrong key) and verify error reporting in Slack. Check server logs.

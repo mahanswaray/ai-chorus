@@ -1,0 +1,89 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+**`technical_design.md`**
+
+```markdown
+# Technical Design: Local Slack Audio to Multi-AI Web App Workflow
+
+## 1. Architecture Overview
+
+The system uses a locally hosted FastAPI server exposed to the internet via ngrok. It receives events from Slack, performs STT via OpenAI API, and uses the Playwright library to control local Chrome/Chromium browser instances (where the user has manually logged in) to interact with target AI web applications.
+
+```mermaid
+graph LR
+    Slack -- Events --> Ngrok;
+    Ngrok -- Forwards Request --> LocalFastAPI[Local FastAPI Server (Python)];
+    LocalFastAPI -- Immediate 200 OK --> Slack;
+    LocalFastAPI -- Schedules --> BackgroundTask[FastAPI Background Task];
+    BackgroundTask -- Uses --> SlackSDK[slack_sdk];
+    BackgroundTask -- Calls --> OpenAI_API[OpenAI Whisper API];
+    BackgroundTask -- Controls --> Playwright[Playwright Library];
+    Playwright -- Manages --> ChromeChatGPT[Local Chrome Context (ChatGPT - Logged In)];
+    Playwright -- Manages --> ChromeClaude[Local Chrome Context (Claude - Logged In)];
+    Playwright -- Manages --> ChromeGemini[Local Chrome Context (Gemini - Logged In)];
+    SlackSDK -- Downloads Audio/Posts Reply --> Slack;
+    ChromeChatGPT -- Interaction --> ChatGPT_Web[ChatGPT Web UI];
+    ChromeClaude -- Interaction --> Claude_Web[Claude Web UI];
+    ChromeGemini -- Interaction --> Gemini_Web[Gemini Web UI];
+
+    style LocalFastAPI fill:#f9f,stroke:#333,stroke-width:2px
+    style BackgroundTask fill:#f9f,stroke:#333,stroke-width:1px,stroke-dasharray: 5 5
+    style Playwright fill:#f9f,stroke:#333,stroke-width:2px
+    style ChromeChatGPT fill:#ccf,stroke:#333,stroke-width:1px
+    style ChromeClaude fill:#ccf,stroke:#333,stroke-width:1px
+    style ChromeGemini fill:#ccf,stroke:#333,stroke-width:1px
+```
+
+## 2. Components & Technologies
+
+* **Trigger:** Slack Event Subscription (e.g., `message.channels`) -> ngrok Tunnel -> Local FastAPI Server endpoint.
+* **Compute:** User's local machine.
+* **Web Server:** FastAPI (Python framework). Run using `uvicorn`.
+* **Public Exposure:** ngrok (locally installed and run).
+* **Dependency Management:** `uv`.
+* **Speech-to-Text (STT):** OpenAI Whisper API (`whisper-1` model). Requires OpenAI API Key.
+* **Browser Automation:** Playwright (Python library). Requires local browser installation (`playwright install --with-deps chromium`).
+* **Browser Instance Management:** Playwright's `launch_persistent_context` method will be used to launch Chrome/Chromium windows using a dedicated `user_data_dir`. This allows session persistence. The user **must manually log in** to ChatGPT, Claude, and Gemini within these specific windows after the server starts them. The application needs to manage references to these persistent contexts/pages.
+* **Slack Integration:** Slack SDK for Python (`slack_sdk`). Requires Slack Bot Token and App Signing Secret.
+
+## 3. Control Flow Summary
+
+1.  User posts a message (with/without audio) in the designated Slack channel.
+2.  Slack sends an event via webhook to the public ngrok URL.
+3.  ngrok tunnels the request to the locally running FastAPI server.
+4.  FastAPI endpoint receives the request, verifies the Slack signature.
+5.  If it's a valid event (e.g., a user message), the endpoint **immediately returns a 200 OK** to Slack.
+6.  Simultaneously, the endpoint schedules a **background task** using FastAPI's `BackgroundTasks`.
+7.  The background task executes asynchronously:
+    *   If audio is present, download it via Slack SDK. Use OpenAI Whisper API for transcription. If no audio, use message text.
+    *   Identify the correct pre-launched, logged-in Playwright browser context/page for the target AI service (e.g., ChatGPT).
+    *   Execute the predefined Playwright script against that page: find input, paste text, click submit, wait for response/navigation, capture the final chat URL.
+    *   Repeat for Claude and Gemini contexts.
+    *   Collect results (URLs or errors) for each AI.
+    *   Post a formatted summary back to the initiating Slack channel/thread using Slack SDK.
+
+## 4. Key Design Choices & Rationale
+
+* **Local Execution (FastAPI + ngrok):** Chosen for simplicity, direct control over the environment, avoiding cloud hosting costs and deployment complexity (no AWS/BrowserBase). Addresses user's preference after finding cloud options too complex/costly. Acknowledges the limitation that the local machine/server/ngrok must be running.
+* **Asynchronous Processing:** Uses FastAPI's `BackgroundTasks` to handle potentially long-running operations (STT, Playwright) *after* immediately acknowledging the incoming Slack event, preventing Slack timeouts.
+* **Playwright (Direct):** Provides fine-grained local browser control needed to interact with complex web apps. Avoids external service dependency/cost (like BrowserBase).
+* **Persistent Context + Manual Login:** Necessary trade-off for using Playwright locally without building complex, brittle automated login flows. Leverages the user's existing authenticated state within specific browser instances managed by Playwright.
+* **OpenAI Whisper API:** Mature, high-quality STT service with a straightforward API.
+* **Python/FastAPI/uv:** Modern, efficient Python stack with strong library support for required integrations. FastAPI is suitable for the local server handling incoming webhooks.
+
+## 5. Error Handling Strategy
+
+* Implement `try-except` blocks in FastAPI endpoints and around external calls (Slack, OpenAI, Playwright actions).
+* Log errors effectively to the console (or a local file).
+* Handle Playwright-specific errors (e.g., `TimeoutError`, element not found).
+* Report specific failures back to the user in the Slack response message (e.g., "Failed to get transcript", "Could not submit to Claude: Timeout waiting for selector").
+* Handle partial failures gracefully (e.g., succeed for ChatGPT, fail for Claude).
+
+## 6. Security Considerations
+
+* **ngrok Exposure:** The ngrok tunnel exposes a local port. While Slack request signature verification adds a layer of security (ensuring requests come from Slack), the endpoint is technically public. Consider running ngrok only when needed. A paid ngrok plan can offer features like IP allowlisting.
+* **API Keys/Tokens:** Store API Keys (OpenAI) and Slack Tokens securely using environment variables loaded from a `.env` file (ensure `.env` is in `.gitignore`). Do not commit credentials.
+* **Browser Context Data:** The `user_data_dir` used by Playwright will contain sensitive session cookies. Ensure this directory is appropriately secured on the local machine and not committed to version control.

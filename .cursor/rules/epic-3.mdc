@@ -1,0 +1,34 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Epic 3: Playwright Foundation & Connection to Existing Browsers (Local)
+
+**Goal:** Set up Playwright to connect to pre-existing, user-launched Chrome instances (each with its own profile and remote debugging port) when the FastAPI server starts. This allows interaction with sites where the user is already logged in manually.
+
+* **E3.T1:** **Dependency:** Add `playwright` to `requirements.txt` and install (`uv pip install -r requirements.txt`). Run `playwright install --with-deps chromium` (or ensure compatible Chrome/Chromium is available).
+* **E3.T2:** **Configuration:**
+    *   **User Action:** User must manually launch separate Chrome instances for each AI service (e.g., ChatGPT, Claude, Gemini), each using a distinct `--user-data-dir` and `--remote-debugging-port`.
+    *   **Environment Variables:** Define environment variables in `.env` specifying the remote debugging port for each service (e.g., `CHROME_DEBUG_PORT_CHATGPT=9222`, `CHROME_DEBUG_PORT_CLAUDE=9223`, `CHROME_DEBUG_PORT_GEMINI=9224`).
+    *   **Config Loading:** **Modify `app/config.py`** to load these port environment variables and associate them with the AI service definitions (e.g., in the `AI_SERVICES` dictionary).
+* **E3.T3:** **Playwright Connection Management:** **Create/Modify `app/playwright_handler.py`.** This module is responsible for Playwright setup and connection management.
+    * **Subtask 3.1:** Define a mechanism within `app/playwright_handler.py` to hold references to the active Playwright `Browser`, `BrowserContext`, and potentially `Page` objects obtained after connecting (e.g., a dictionary mapping AI service names like 'chatgpt' to their respective instances).
+    * **Subtask 3.2:** **Implement connection logic within `app/playwright_handler.py`** (e.g., an async function like `initialize_playwright_connections()`).
+    * **Subtask 3.3:** Call `initialize_playwright_connections()` **from the FastAPI `lifespan` context manager defined in `app/main.py`** during the startup phase.
+    * **Subtask 3.4:** The `initialize_playwright_connections()` function in `app/playwright_handler.py` should:
+        * Get the debugging port for each service from `app/config.py`.
+        * Construct the CDP endpoint URL (e.g., `http://localhost:<port>`).
+        * Attempt to connect using Playwright's `chromium.connect_over_cdp(endpoint_url)`.
+        * Store the returned `Browser`, its default `BrowserContext`, and an active `Page` object in the dictionary defined in Subtask 3.1.
+        * Handle connection errors gracefully (e.g., if Chrome isn't running on that port).
+* **E3.T4:** **Connection Status Reporting:** **The `initialize_playwright_connections()` function in `app/playwright_handler.py`** should print the connection status (success/failure) for each service to the console on startup.
+* **E3.T5:** **Shutdown Logic:** **Implement cleanup logic within `app/playwright_handler.py`** (e.g., an async function like `close_playwright_connections()`). This function should iterate through the stored browser instances and call `browser.close()` (which disconnects the CDP connection).
+    * **Call `close_playwright_connections()` from the FastAPI `lifespan` context manager in `app/main.py`** during the shutdown phase.
+* **E3.T6:** **Testing:**
+    * **User Action:** Manually launch the Chrome instances with the correct profiles and remote debugging ports. Ensure you are logged into the target AI sites.
+    * Run the FastAPI server (`uvicorn app.main:app --reload ...`).
+    * Verify the console displays the correct connection status for each service.
+    * Send a test message via Slack. Verify the application can interact with the connected browsers (e.g., the added screenshot test worked).
+    * Stop the FastAPI server (Ctrl+C). Verify the script disconnects cleanly (the manually launched Chrome instances will remain open).
+    * Restart the server. Verify it reconnects successfully to the still-running Chrome instances.

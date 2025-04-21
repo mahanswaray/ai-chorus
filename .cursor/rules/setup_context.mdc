@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Take a look at [epic-1.mdc](mdc:.cursor/rules/epic-1.mdc) [epic-2.mdc](mdc:.cursor/rules/epic-2.mdc) [epic-3.mdc](mdc:.cursor/rules/epic-3.mdc) [epic-4.mdc](mdc:.cursor/rules/epic-4.mdc) [epic-5.mdc](mdc:.cursor/rules/epic-5.mdc) [project-context.mdc](mdc:.cursor/rules/project-context.mdc) [technical-design.mdc](mdc:.cursor/rules/technical-design.mdc) [web_automation_research_protocol.mdc](mdc:.cursor/rules/web_automation_research_protocol.mdc) [local-dev-setup.mdc](mdc:.cursor/rules/local-dev-setup.mdc) [code-style-and-hygiene.mdc](mdc:.cursor/rules/code-style-and-hygiene.mdc) and load context about the project and get ready for the next task the user will specify (not yet known by you)

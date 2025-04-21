@@ -1,0 +1,74 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Rule: ChatGPT Playwright Integration Details
+
+**Goal:** Consolidate findings from Epic 4 regarding the ChatGPT web UI analysis and Playwright scripting logic for use in the main application (`app/playwright_handler.py`).
+
+## 1. UI Flow & Logic
+
+The sequence for submitting a prompt via Playwright to a logged-in ChatGPT instance is:
+
+1.  **Connect & Find Page:** Connect to the browser via CDP and locate the correct page object whose URL contains `chat.openai.com`.
+2.  **Start New Chat:** Click the "New Chat" button to ensure a clean state. Wait for the main input area to become visible again.
+3.  **(Optional) Select Model:**
+    *   Click the Model Switcher dropdown trigger.
+    *   Wait for the desired model option `div` within the dropdown menu to become visible.
+    *   Click the desired model option `div`.
+4.  **(Optional) Toggle Features:**
+    *   Locate the "Search" or "Deep Research" toggle button.
+    *   Check its `aria-pressed` attribute.
+    *   If the desired state (e.g., `true` for ON) doesn't match the current state, click the toggle.
+    *   Wait for the `aria-pressed` attribute to reflect the change.
+5.  **Enter Prompt:** Locate the main text input area (`#prompt-textarea`) and fill it with the prompt text.
+6.  **Submit Prompt:**
+    *   Locate the Submit button (note: its `data-testid` changes after text is entered).
+    *   Wait for the Submit button to be *visible*.
+    *   Wait for the Submit button to be *enabled*.
+    *   Click the Submit button.
+7.  **Wait for Result & Capture URL:** Wait for the page URL to change to the pattern `**/c/**`, indicating the new chat session has been created. Capture the `page.url`.
+
+## 2. Key Selectors
+
+*   **New Chat Button:** `button[data-testid="create-new-chat-button"]`
+    *   *Nuance:* Use `.last` on the locator if multiple elements match.
+*   **Model Switcher Trigger:** `[data-testid="model-switcher-dropdown-button"]`
+    *   *Nuance:* Use `.last` on the locator if multiple elements match.
+*   **Model Option (in dropdown):** `div[data-testid="model-switcher-{model_suffix}"]`
+    *   Replace `{model_suffix}` with the target model's identifier (see below).
+*   **Search Toggle:** `[data-testid="composer-button-search"]`
+    *   Check/wait for `aria-pressed` attribute (`"true"`/`"false"`).
+*   **Deep Research Toggle:** `[data-testid="composer-button-deep-research"]`
+    *   Check/wait for `aria-pressed` attribute (`"true"`/`"false"`).
+*   **Text Input Area:** `#prompt-textarea[contenteditable="true"]`
+*   **Submit Button (after text entry):** `button[data-testid="send-button"]`
+
+## 3. Model Selection Suffixes
+
+Use these suffixes in the `MODEL_OPTION_SELECTOR` format `div[data-testid="model-switcher-{suffix}"]`:
+
+*   `gpt-4o`
+*   `gpt-4o-jawbone` (GPT-4o with scheduled tasks)
+*   `gpt-4-5` (GPT-4.5 Research Preview)
+*   `o3`
+*   `o4-mini`
+*   `o4-mini-high`
+
+## 4. Playwright Commands & Waiting Strategy
+
+*   **Page Finding:** Iterate through `context.pages` and find the one where `page.url` contains `chat.openai.com`.
+*   **Waiting:**
+    *   Use `expect(locator).to_be_visible(timeout=...)` before interacting or checking other states.
+    *   Use `expect(locator).to_be_enabled(timeout=...)` for buttons before clicking.
+    *   Use `expect(locator).to_have_attribute("aria-pressed", "true"/"false", timeout=...)` after clicking toggles.
+    *   Use `page.wait_for_url("**/c/**", timeout=...)` as the primary mechanism to detect successful submission and get the permalink. A longer timeout (e.g., 60 seconds) is recommended here.
+    *   Use short `time.sleep(0.5)` or `time.sleep(1)` pauses *sparingly* after actions like `fill` or `click` if the UI needs a moment to settle before the next check/action, but prefer explicit waits (`expect`, `wait_for_url`).
+*   **Error Handling:** Implement `try...except PlaywrightTimeoutError` and general `Exception` blocks. Disconnect the browser (`browser.close()`) in a `finally` block.
+
+## 5. Implementation Notes
+
+*   These selectors and logic should be implemented within functions in `app/playwright_handler.py`, likely an async function like `submit_prompt_chatgpt(page: Page, prompt: str, ...) -> str | None`.
+*   Remember that the browser must be launched with remote debugging enabled, and the user must be logged in. Connection is handled via `p.chromium.connect_over_cdp(url)`.
+*   Consider making model selection and toggles optional parameters for the implementation function.

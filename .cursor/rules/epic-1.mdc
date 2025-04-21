@@ -1,0 +1,26 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Epic 1: Foundational Setup & "Hello World" (Local FastAPI)
+
+**Goal:** Set up the local FastAPI server, expose it via ngrok, handle Slack event verification, listen for any new message in a channel, and respond "Hello World" in a thread.
+
+* **E1.T1:** **Project Setup:** Initialize Python project (`uv`, `git`), **create initial module structure (`app/main.py`, `app/config.py`, `app/slack_handler.py`, `app/background_processor.py`, `tests/`)**, add initial dependencies (`fastapi`, `uvicorn`, `slack_sdk`, `python-dotenv`) to `requirements.txt`.
+* **E1.T2:** **FastAPI App:** Create the basic FastAPI application instance in `app/main.py`. Define the `/slack/events` POST endpoint. This endpoint will primarily handle request validation and **delegate core logic to `app/slack_handler.py` and `app/background_processor.py`**.
+* **E1.T3:** **Environment Config:** **Implement config loading in `app/config.py`**. This module should load `.env` variables (like `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`) and make them available as constants or via a config object. Add `.env` to `.gitignore`. Document setup in `local_development_setup.md`.
+* **E1.T4 (New):** **Slack Client Setup:** Initialize the `slack_sdk.WebClient` and `SignatureVerifier` within `app/slack_handler.py`, potentially using configuration values from `app/config.py`. Define functions for Slack interactions (e.g., posting messages, fetching user info). Fetch the Bot User ID on app startup (using FastAPI lifespan or within `slack_handler`).
+* **E1.T6:** **ngrok Setup:** Install ngrok locally, configure authtoken if needed. Document how to run it alongside the FastAPI server (`ngrok http <port>`).
+* **E1.T7:** **Slack App Config:** Create Slack App. Configure Event Subscriptions for `message.channels` event. Add necessary Bot Scopes (`chat:write`, `channels:history`, potentially `files:read` for later). Install app, get Token/Secret. Point Request URL to a placeholder initially.
+* **E1.T8:** **Run & Configure Slack:** Run `uvicorn` and `ngrok`. Update Slack Event Subscription Request URL with the live ngrok HTTPS URL. Verify endpoint successfully. Reinstall app if needed.
+* **E1.T9:** **Basic Event Handling & Response:** Modify the `/slack/events` endpoint in `app/main.py`:
+    * **Use the `SignatureVerifier` from `app/slack_handler.py`** to validate the incoming request.
+    * Handle URL verification directly in the endpoint.
+    * For `event_callback` of type `message`, **delegate the core event parsing and validation logic to a function within `app/slack_handler.py`** (e.g., `should_process_event(event)`). This function determines if the event is a valid user message to process (not from the bot, correct type/subtype).
+    * If the event should be processed, **extract necessary details (like `channel_id`, `ts`) and schedule the background task**, passing the event data to a function in `app/background_processor.py` (e.g., `process_hello_world(event)`).
+    * The main endpoint returns 200 OK immediately.
+* **E1.T10 (Modified):** **Background Task (Hello World):** Implement the initial background task function (e.g., `process_hello_world`) within `app/background_processor.py`. This function will:
+    * Receive the event data.
+    * **Call a function in `app/slack_handler.py`** (e.g., `post_hello_world_reply(channel_id, thread_ts)`) to actually send the "Hello World" message using the initialized `slack_sdk` client.
+* **E1.T11 (was E1.T10):** **Testing:** Run server & ngrok. Post a message in the designated Slack channel. Verify the bot replies "Hello World..." in a thread. Check server logs for successful request verification, task scheduling, background task delegation, and Slack API calls.

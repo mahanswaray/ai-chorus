@@ -1,0 +1,34 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Epic 8: Gemini Website DOM Analysis & Playwright Scripting (Local)
+
+**Goal:** Analyze the Gemini (gemini.google.com) web UI's structure and user flow for submitting a new chat, then define the specific sequence of Playwright commands needed to automate this process within an already logged-in browser context. Follow the `@web_automation_research_protocol.mdc`.
+
+* **E8.T1:** **Manual Workflow Analysis (Gemini):**
+    * Start the FastAPI server (which connects to browser contexts **via `app/playwright_handler.py` as defined in Epic 3**).
+    * In the Playwright-controlled Gemini window (`gemini.google.com`):
+        * Manually navigate the state for starting a *new* chat (might involve specific button clicks or just loading the main page). Observe the URL and UI elements.
+        * Identify the primary text input area (likely a complex element, potentially a `div` with specific roles or attributes).
+        * Identify the submit/send button.
+        * Paste text and submit. Observe how the page updates. Does the URL change? Is there a reliable indicator of submission success?
+        * Observe the final URL after the first response appears – this is the target URL to capture. Gemini might use URL fragments (#) or path changes.
+* **E8.T2:** **DOM Inspection & Selector Strategy:**
+    * Use browser developer tools within the Playwright-controlled Gemini window.
+    * Identify reliable CSS selectors or XPath expressions for:
+        * The main text input area.
+        * The submit button.
+        * Any elements needed to ensure the page is ready for input (e.g., loading indicators disappearing).
+        * An element/state indicating successful submission/response start.
+    * Prioritize stable attributes (`aria-label`, custom attributes, unique IDs) over potentially dynamic class names common in Google UIs.
+* **E8.T3:** **Playwright Script Definition:** Define the sequence of Playwright actions. **This sequence will eventually be implemented as a function within `app/playwright_handler.py`** (e.g., `submit_prompt_gemini(page: Page, prompt: str) -> str | None`). The function will perform:
+    * **Step 1:** Locate the text input area.
+    * **Step 2:** Fill the input area with the transcript text.
+    * **Step 3:** Locate the submit button.
+    * **Step 4:** Click the submit button.
+    * **Step 5:** Implement a reliable wait strategy (e.g., waiting for a response element to appear, waiting for URL changes/fragment updates, waiting for input area to clear or submit button to change state). *Avoid fixed timeouts.*
+    * **Step 6:** After the wait confirms submission/response, get the current page URL (`page.url`).
+* **E8.T4:** **Refinement & Alternatives:** Consider Gemini-specific elements like potential consent modals, UI variations. Document potential failure points.
+* **E8.T5:** **Testing (Manual Script Execution):** Use a simple standalone Python script or interactive session. **Import relevant initialization/connection functions from `app/playwright_handler.py`** to get the Gemini `page` object. Manually execute the defined Playwright steps, refining selectors and waits.

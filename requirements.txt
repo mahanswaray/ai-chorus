@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+slack_sdk
+python-dotenv
+openai
+playwright
+httpx 

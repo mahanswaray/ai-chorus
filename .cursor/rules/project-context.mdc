@@ -1,0 +1,36 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Project Context: Local Slack Audio to Multi-AI Web App Workflow
+
+## 1. Problem Statement
+
+The user frequently has thoughts or questions throughout the day that they want to pose to multiple AI chat applications (ChatGPT, Claude, Gemini). Using voice dictation within one app is convenient, but manually copying the transcribed text to the other platforms is tedious and breaks the workflow. The user wants a "fire and forget" mechanism to capture these voice notes and have them automatically submitted as new chats within the *web applications* of each AI service, allowing them to review the responses and continue the conversations within those native UIs later.
+
+## 2. Goal
+
+To create an automated workflow, **running locally on the user's machine**, triggered by messages (containing audio or just text for transcription) in a specific Slack channel. This workflow will:
+1.  Optionally download audio if present, or use message text. Transcribe audio using a Speech-to-Text (STT) service.
+2.  Use local browser automation (Playwright) to programmatically interact with locally running instances of Chrome/Chromium where the user has manually logged into ChatGPT, Claude, and Gemini.
+3.  Paste the transcribed text (or original message text) into the chat input of each application and submit it, initiating a new chat session within the existing logged-in state.
+4.  Capture the unique URL (permalink) for each newly created chat session.
+5.  Post these URLs back to the original Slack channel (ideally as a threaded reply).
+
+## 3. Core User Requirements
+
+* **Input:** Message in a designated Slack channel (potentially containing an audio file).
+* **Processing:** Automatic transcription (if audio) and submission to AI web apps via local browser automation.
+* **Output:** Links to the newly created chat sessions within chat.openai.com, claude.ai, and gemini.google.com posted back to Slack.
+* **Persistence:** The primary interaction history should reside within the target AI web applications themselves. The workflow initiates these web sessions within the user's existing login state.
+* **Execution Environment:** Must run reliably on the user's local machine when the server script and browser instances are active. Requires manual user login to target sites within the Playwright-managed browsers at the start of each session.
+
+## 4. Non-Goals (for MVP)
+
+* A cloud-hosted, always-on solution.
+* Automated handling of logins/2FA (relies on manual login to persistent browser contexts).
+* A dedicated user interface outside of Slack.
+* Handling complex file inputs (e.g., PDFs) alongside audio/text.
+* Advanced configuration of AI models (e.g., choosing specific model versions, temperature settings) via the workflow.
+* Real-time streaming transcription or responses.

@@ -1,0 +1,46 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Rule: Code Style & Hygiene
+
+**Goal:** Ensure the codebase remains readable, maintainable, and easy to extend, even as a solo project, by promoting modularity and clarity without excessive abstraction.
+
+## 1. Modularity & Structure
+
+*   **Avoid Monolithic Files:** `app/main.py` should primarily handle FastAPI setup, request routing, and orchestrating calls to other modules. Core logic should reside in separate files.
+*   **Proposed Structure:**
+    *   `app/main.py`: FastAPI app instance, endpoint definitions, background task scheduling.
+    *   `app/config.py`: Load and provide access to environment variables and constants (e.g., `OPENAI_MODEL`, `PLAYWRIGHT_USER_DATA_DIR`).
+    *   `app/slack_handler.py`: Functions related to Slack event processing, message parsing, file downloading, and posting replies.
+    *   `app/openai_handler.py`: Functions for interacting with the OpenAI API (specifically transcription).
+    *   `app/playwright_handler.py`: Functions for initializing Playwright, managing browser contexts, and scripting interactions with target web apps (ChatGPT, Claude, Gemini). Could be further broken down per target site if needed.
+    *   `app/background_processor.py`: Contains the main background task logic (`process_message_event`), orchestrating calls to the handlers above.
+*   **Single Responsibility Principle (SRP):** Functions should aim to do one thing well. For example, the background task should delegate downloading, transcribing, and web interaction to specific functions/modules.
+
+## 2. Clarity & Readability
+
+*   **Naming:** Use descriptive names for variables, functions, and modules.
+*   **Function Length:** Keep functions reasonably short. If a function exceeds ~30-50 lines, consider breaking it down.
+*   **Type Hinting:** Use Python type hints for function arguments and return values to improve clarity and enable static analysis.
+*   **Docstrings:** Add simple docstrings to public functions and modules explaining their purpose.
+*   **Constants:** Avoid magic strings/numbers. Define them in `app/config.py`.
+
+## 3. Configuration & State Management
+
+*   **Centralized Config:** Use `app/config.py` (or a similar mechanism) to manage all external configurations and constants. Load `.env` variables there.
+*   **Client Initialization:** Initialize external clients (Slack, OpenAI, Playwright contexts) cleanly, potentially within their respective handler modules or managed through FastAPI dependencies/lifespan events. Avoid excessive reliance on global variables in `main.py` if possible.
+*   **Playwright Contexts:** Manage Playwright browser contexts explicitly. The `app/playwright_handler.py` should be responsible for their creation, storage (e.g., in a dictionary keyed by site name), and retrieval.
+
+## 4. Error Handling & Logging
+
+*   **Specific Exceptions:** Define custom exceptions for known error conditions where useful (e.g., `TranscriptionError`, `PlaywrightActionError`).
+*   **Consistent Logging:** Use the `logging` module effectively. Log key events, decisions, and especially errors with relevant context (e.g., channel ID, user ID, relevant data snippet).
+*   **User Feedback:** Report errors back to the user via Slack in a user-friendly way, but log detailed technical information for debugging. Differentiate between transient (retryable?) and permanent errors.
+
+## 5. Dependencies
+
+*   Keep `requirements.txt` up-to-date using `uv pip freeze > requirements.txt` (or manual updates).
+
+This guide provides a baseline. Feel free to adapt as the project evolves, but prioritize keeping the structure organized and the logic separated by concern.

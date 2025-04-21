@@ -1,0 +1,33 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Epic 5: ChatGPT Integration & E2E Testing (Local)
+
+**Goal:** Integrate the defined ChatGPT Playwright script into the FastAPI application, triggering it when a transcript is ready, and posting the captured ChatGPT URL back to Slack.
+
+* **E5.T1:** **Access Browser Context:** Modify the **background task function in `app/background_processor.py`**. After obtaining the transcript (or user text), it needs to retrieve the specific Playwright `Page` object for ChatGPT. **Implement a function in `app/playwright_handler.py`** (e.g., `get_page_for_service(service_name: str) -> Page | None`) that returns the correct, active page object from the stored contexts/pages (created in Epic 3).
+* **E5.T2:** **Implement Playwright Function:** **Implement the ChatGPT submission function within `app/playwright_handler.py`** (e.g., `submit_prompt_chatgpt(page: Page, prompt: str, model_suffix: str | None = None, enable_search: bool = False) -> str | None`).
+    *   This function encapsulates the **full sequence defined in the `chatgpt_playwright_integration.mdc` rule** (based on Epic 4 findings).
+    *   **The first action** within this function should be to **click the 'New Chat' button** to ensure a clean state.
+    *   It takes the specific `page` object and the text (transcript or original message) as input, performs the automation (optionally selecting model/toggles based on parameters), and returns the captured URL or `None` on failure.
+    *   Include robust `try...except` blocks for Playwright errors (e.g., `TimeoutError`).
+* **E5.T3:** **Trigger Automation:** **In the background task function (`app/background_processor.py`)**, after getting the transcript/text and retrieving the ChatGPT `page` object (using `get_page_for_service('chatgpt')`):
+    * Call the `playwright_handler.submit_prompt_chatgpt` function, passing the page object and the text (and potentially model/search parameters if needed).
+* **E5.T4:** **Handle Results & Update Slack:**
+    * **In the background task (`app/background_processor.py`)**, get the result (URL or `None`) from the `submit_prompt_chatgpt` call.
+    * Collate results (currently just transcription status and ChatGPT URL/error).
+    * **Call a function in `app/slack_handler.py`** (e.g., `post_summary_reply(channel_id, thread_ts, results: dict)`) to format and post the final summary message (including transcript snippet, ChatGPT URL/error, and eventually status for other AIs) back to the Slack thread.
+* **E5.T5:** **Refine Error Handling:** Implement specific error handling within `app/playwright_handler.py` (catching Playwright errors) and `app/background_processor.py` (handling `None` returns or exceptions from handlers). Ensure error messages passed to `slack_handler.post_summary_reply` are user-friendly.
+* **E5.T6:** **End-to-End Testing:**
+    * Run the full application (`uvicorn`, ensuring `app/playwright_handler.py` launches browsers, manual logins, `ngrok`).
+    * Send test messages (with and without audio) to the Slack channel.
+    * **Verify:**
+        * The interaction occurs automatically in the Playwright-managed ChatGPT window.
+        * A new chat with the correct content is created in your ChatGPT UI.
+        * The correct permalink URL for the *new* ChatGPT chat is posted back to the Slack thread.
+    * **Test Failures:**
+        * Test what happens if the ChatGPT page structure changes slightly (if possible to simulate) or if network is slow. Does it timeout gracefully? Is the error reported correctly?
+        * Test sending multiple requests in quick succession (ensure Playwright actions don't interfere with each other if using a single page, though separate contexts per AI is safer).
+        * Stop/start the server and ensure it still works with the persisted login state.

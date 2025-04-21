@@ -1,0 +1,40 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Epic 4: ChatGPT Website DOM Analysis & Playwright Scripting (Local)
+
+**Goal:** Analyze the ChatGPT web UI's structure and user flow for submitting a new chat, then define the specific sequence of Playwright commands needed to automate this process within an already logged-in browser context.
+
+* **E4.T1:** **Manual Workflow Analysis (ChatGPT):**
+    * Start the FastAPI server (which launches the browser contexts **via `app/playwright_handler.py` as defined in Epic 3**).
+    * In the Playwright-controlled ChatGPT window:
+        * Manually navigate to the state for starting a *new* chat (usually the default state or requires clicking a "New Chat" button). Observe the URL.
+        * Identify the primary text input area (textarea).
+        * Identify the submit/send button.
+        * Paste some text and click submit.
+        * Observe how the page updates: Does the URL change immediately? Does new content appear? How can you reliably detect submission success?
+        * Observe the final URL after the first response appears – this is likely the target URL to capture.
+* **E4.T2:** **DOM Inspection & Selector Strategy:**
+    * Use browser developer tools (right-click -> Inspect) within the Playwright-controlled ChatGPT window.
+    * Identify reliable CSS selectors or XPath expressions for:
+        * The main text input area.
+        * The submit button.
+        * An element that indicates the page is ready for input (if needed).
+        * An element that appears *after* a message is sent/response starts (to wait for submission completion).
+    * Prioritize selectors resistant to change (e.g., using stable `id` attributes, `data-testid` attributes if available, or robust structural paths over easily changed CSS classes).
+* **E4.T3:** **Playwright Script Definition:** Define the sequence of Playwright actions. **This sequence will eventually be implemented as a function within `app/playwright_handler.py`** (e.g., `submit_prompt_chatgpt(page: Page, prompt: str) -> str | None`). The function will perform:
+    * **Step 1:** Locate the text input area (e.g., `page.locator(...)`). Handle potential waits if it loads dynamically.
+    * **Step 2:** Fill the input area with the transcript text (e.g., `input_locator.fill(transcript_text)`).
+    * **Step 3:** Locate the submit button (e.g., `page.locator(...)`).
+    * **Step 4:** Click the submit button (e.g., `submit_button.click()`).
+    * **Step 5:** Implement a reliable wait strategy. This is crucial. Options:
+        * Wait for a specific network request/response? (Harder).
+        * Wait for the URL to change? (`page.wait_for_url(...)`).
+        * Wait for a specific element indicating a response has started to appear? (`page.wait_for_selector(...)`).
+        * Wait for the submit button to disappear or become disabled?
+        * *Avoid fixed `page.wait_for_timeout()` delays.*
+    * **Step 6:** After the wait confirms submission/response, get the current page URL (`page.url`). This is the target permalink.
+* **E4.T4:** **Refinement & Alternatives:** Consider edge cases. What if the selectors change slightly? What if there's a modal dialog? Document potential failure points and how the script might handle them (e.g., timeouts, fallback selectors - though keep it simple for MVP).
+* **E4.T5:** **Testing (Manual Script Execution):** Use a simple standalone Python script or an interactive session. **Import the relevant initialization and context management functions from `app/playwright_handler.py`** to get access to the running browser context. Manually execute the defined Playwright steps against the retrieved `page` object. Refine selectors and waits within this test environment.

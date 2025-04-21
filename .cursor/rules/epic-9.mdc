@@ -1,0 +1,33 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Epic 9: Gemini Integration & E2E Testing (Local)
+
+**Goal:** Integrate the defined Gemini Playwright script into the FastAPI application, triggering it when a transcript/text is ready, and posting the captured Gemini URL back to Slack.
+
+* **E9.T1:** **Access Browser Context:** Modify the **background task function in `app/background_processor.py`**. It needs to retrieve the Playwright `Page` object for Gemini. **Use the existing function `playwright_handler.get_page_for_service('gemini')`**.
+* **E9.T2:** **Implement Playwright Function:** **Implement the Gemini submission function within `app/playwright_handler.py`** (e.g., `submit_prompt_gemini(page: Page, prompt: str) -> str | None`).
+    * This function encapsulates the sequence defined in **Epic 8**.
+    * It should handle locating/interacting with the input area, clicking submit, and waiting reliably for the response/URL update.
+    * It takes the specific Gemini `page` object and the text (transcript or original message) as input.
+    * Returns the captured URL or `None` on failure.
+    * Include robust `try...except` blocks for Playwright errors (e.g., `TimeoutError`).
+* **E9.T3:** **Trigger Automation:** **In the background task function (`app/background_processor.py`)**, after getting the transcript/text and retrieving the Gemini `page` object:
+    * Call the new `playwright_handler.submit_prompt_gemini` function, passing the page object and the text.
+* **E9.T4:** **Handle Results & Update Slack:**
+    * **In the background task (`app/background_processor.py`)**: Get the result (URL or `None`) from the `submit_prompt_gemini` call.
+    * **Modify the `results` dictionary** to include keys for `gemini_url` and `gemini_error`.
+    * **Update the `slack_handler.post_summary_reply` function and its call site** to include the Gemini status (URL or error) in the final summary message posted to Slack, alongside ChatGPT and Claude status.
+* **E9.T5:** **Refine Error Handling:** Implement specific error handling within `app/playwright_handler.py` (catching Playwright errors for Gemini) and `app/background_processor.py` (handling `None` returns or exceptions). Ensure error messages passed to `slack_handler.post_summary_reply` are user-friendly for Gemini failures.
+* **E9.T6:** **End-to-End Testing:**
+    * Run the full application (`uvicorn`, ensure Playwright setup for all services, manual logins, `ngrok`).
+    * Send test messages (with and without audio) to the Slack channel.
+    * **Verify:**
+        * The interaction occurs automatically in the Playwright-managed Gemini window.
+        * A new chat with the correct content is created in your `gemini.google.com` UI.
+        * The correct permalink URL for the *new* Gemini chat is posted back to the Slack thread (alongside other AI statuses).
+    * **Test Failures:**
+        * Test timeouts and report errors correctly for Gemini.
+        * Ensure all three integrations (ChatGPT, Claude, Gemini) work together without interference.

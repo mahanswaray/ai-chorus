@@ -1,0 +1,33 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Epic 7: Claude Integration & E2E Testing (Local)
+
+**Goal:** Integrate the defined Claude Playwright script into the FastAPI application, triggering it when a transcript/text is ready, and posting the captured Claude URL back to Slack.
+
+* **E7.T1:** **Access Browser Context:** Modify the **background task function in `app/background_processor.py`**. It needs to retrieve the Playwright `Page` object for Claude. **Use the existing function `playwright_handler.get_page_for_service('claude')`**.
+* **E7.T2:** **Implement Playwright Function:** **Implement the Claude submission function within `app/playwright_handler.py`** (e.g., `submit_prompt_claude(page: Page, prompt: str) -> str | None`).
+    * This function encapsulates the sequence defined in **Epic 6**.
+    * It should handle finding the input, filling it, clicking submit, and waiting reliably for the response/URL change.
+    * It takes the specific Claude `page` object and the text (transcript or original message) as input.
+    * Returns the captured URL or `None` on failure.
+    * Include robust `try...except` blocks for Playwright errors (e.g., `TimeoutError`).
+* **E7.T3:** **Trigger Automation:** **In the background task function (`app/background_processor.py`)**, after getting the transcript/text and retrieving the Claude `page` object:
+    * Call the new `playwright_handler.submit_prompt_claude` function, passing the page object and the text.
+* **E7.T4:** **Handle Results & Update Slack:**
+    * **In the background task (`app/background_processor.py`)**: Get the result (URL or `None`) from the `submit_prompt_claude` call.
+    * **Modify the `results` dictionary** to include keys for `claude_url` and `claude_error`.
+    * **Update the `slack_handler.post_summary_reply` function and its call site** to include the Claude status (URL or error) in the final summary message posted to Slack.
+* **E7.T5:** **Refine Error Handling:** Implement specific error handling within `app/playwright_handler.py` (catching Playwright errors for Claude) and `app/background_processor.py` (handling `None` returns or exceptions). Ensure error messages passed to `slack_handler.post_summary_reply` are user-friendly for Claude failures.
+* **E7.T6:** **End-to-End Testing:**
+    * Run the full application (`uvicorn`, ensure Playwright setup for Claude, manual login, `ngrok`).
+    * Send test messages (with and without audio) to the Slack channel.
+    * **Verify:**
+        * The interaction occurs automatically in the Playwright-managed Claude window.
+        * A new chat with the correct content is created in your `claude.ai` UI.
+        * The correct permalink URL for the *new* Claude chat is posted back to the Slack thread (alongside ChatGPT status).
+    * **Test Failures:**
+        * Test timeouts and report errors correctly.
+        * Ensure it works alongside the existing ChatGPT integration.
