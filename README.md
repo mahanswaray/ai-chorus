@@ -1,4 +1,4 @@
-# AI Chorus: Local Slack Audio to Multi-AI Workflow
+# AI Chorus: A chorus for your yapping
 
 A locally running application that listens to Slack messages (including audio), transcribes audio using OpenAI Whisper, and submits the text to multiple AI web applications (ChatGPT, Claude, Gemini) using Playwright browser automation. It posts back the links to the generated conversations and screenshots of the results to the original Slack thread.
 
