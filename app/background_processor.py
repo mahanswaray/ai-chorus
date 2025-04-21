@@ -1,4 +1,7 @@
 import logging
+import asyncio # Added for sleep
+import os      # Added for screenshot file handling
+import time    # Added for timestamp in filename
 from typing import Dict, Any
 
 from . import slack_handler
@@ -7,6 +10,10 @@ from . import playwright_handler
 from . import config # Needed for checks like openai_client presence
 
 logger = logging.getLogger(__name__)
+
+# --- Configuration for Screenshots ---
+SCREENSHOT_DIR = "tmp/screenshots"
+SCREENSHOT_ENABLED = True # Set to False to disable screenshots globally
 
 async def process_message_event(event: Dict[str, Any]):
     """Orchestrates the processing of a message event in the background."""
@@ -107,56 +114,156 @@ async def process_message_event(event: Dict[str, Any]):
 
     # --- Playwright Submission (ChatGPT) --- #
     chatgpt_page = playwright_handler.get_page_for_service("chatgpt")
+    chatgpt_url = None # Initialize URL variable outside the loop
+    chatgpt_attempts = 0
 
     if chatgpt_page:
         logger.info("ChatGPT page found. Attempting submission...")
-        # TODO: Potentially parse user_text for flags like !model=gpt-4o or !search=on
-        chatgpt_url = await playwright_handler.submit_prompt_chatgpt(chatgpt_page, prompt_text, model_suffix='o4-mini', enable_search=True)
-        if chatgpt_url:
-            results['chatgpt_url'] = chatgpt_url
-            logger.info(f"ChatGPT submission successful, URL: {chatgpt_url}")
-        else:
-            results['chatgpt_error'] = "Failed to submit prompt to ChatGPT or capture URL."
-            logger.error(f"ChatGPT submission failed for event {thread_ts}")
+        while chatgpt_attempts < 3 and not chatgpt_url:
+            chatgpt_attempts += 1
+            try:
+                # TODO: Potentially parse user_text for flags like !model=gpt-4o or !search=on
+                chatgpt_url = await playwright_handler.submit_prompt_chatgpt(chatgpt_page, prompt_text, model_suffix='o4-mini', enable_search=True)
+                if chatgpt_url:
+                    results['chatgpt_url'] = chatgpt_url
+                    logger.info(f"ChatGPT submission successful on attempt {chatgpt_attempts}, URL: {chatgpt_url}")
+                    break # Exit loop on success
+                else:
+                    logger.warning(f"ChatGPT submission attempt {chatgpt_attempts} failed (no URL returned). Retrying...")
+            except Exception as e:
+                logger.error(f"ChatGPT submission attempt {chatgpt_attempts} failed with exception: {e}. Retrying...", exc_info=False) # Log exception but don't fill console
+
+            if chatgpt_attempts < 3:
+                await asyncio.sleep(2) # Wait 2 seconds before retrying
+
+        if not chatgpt_url:
+            results['chatgpt_error'] = f"Failed to submit prompt to ChatGPT after {chatgpt_attempts} attempts."
+            logger.error(f"ChatGPT submission failed after {chatgpt_attempts} attempts for event {thread_ts}")
     else:
         results['chatgpt_error'] = "ChatGPT browser connection not available."
         logger.warning(f"ChatGPT page not found or not connected for event {thread_ts}")
 
-    # --- Add other AI service calls here in future epics ---
     # --- Playwright Submission (Claude) --- #
     claude_page = playwright_handler.get_page_for_service("claude")
+    claude_url = None
+    claude_attempts = 0
 
     if claude_page:
         logger.info("Claude page found. Attempting submission...")
-        # TODO: Add logic to parse prompt_text for flags like !extended=on if needed
-        # For now, default use_extended_thinking to False
-        claude_url = await playwright_handler.submit_prompt_claude(claude_page, prompt_text, use_extended_thinking=False)
-        if claude_url:
-            results['claude_url'] = claude_url # Store Claude URL
-            logger.info(f"Claude submission successful, URL: {claude_url}")
-        else:
-            results['claude_error'] = "Failed to submit prompt to Claude or capture URL." # Store Claude error
-            logger.error(f"Claude submission failed for event {thread_ts}")
+        while claude_attempts < 3 and not claude_url:
+            claude_attempts += 1
+            try:
+                # TODO: Add logic to parse prompt_text for flags like !extended=on if needed
+                claude_url = await playwright_handler.submit_prompt_claude(claude_page, prompt_text, use_extended_thinking=True)
+                if claude_url:
+                    results['claude_url'] = claude_url
+                    logger.info(f"Claude submission successful on attempt {claude_attempts}, URL: {claude_url}")
+                    break
+                else:
+                    logger.warning(f"Claude submission attempt {claude_attempts} failed (no URL returned). Retrying...")
+            except Exception as e:
+                logger.error(f"Claude submission attempt {claude_attempts} failed with exception: {e}. Retrying...", exc_info=False)
+
+            if claude_attempts < 3:
+                await asyncio.sleep(2)
+
+        if not claude_url:
+            results['claude_error'] = f"Failed to submit prompt to Claude after {claude_attempts} attempts."
+            logger.error(f"Claude submission failed after {claude_attempts} attempts for event {thread_ts}")
     else:
-        results['claude_error'] = "Claude browser connection not available." # Store Claude error
+        results['claude_error'] = "Claude browser connection not available."
         logger.warning(f"Claude page not found or not connected for event {thread_ts}")
 
     # --- Playwright Submission (Gemini) --- #
     gemini_page = playwright_handler.get_page_for_service("gemini")
+    gemini_url = None
+    gemini_attempts = 0
 
     if gemini_page:
         logger.info("Gemini page found. Attempting submission...")
-        # No extra flags for Gemini in this version
-        gemini_url = await playwright_handler.submit_prompt_gemini(gemini_page, prompt_text)
-        if gemini_url:
-            results['gemini_url'] = gemini_url # Store Gemini URL
-            logger.info(f"Gemini submission successful, URL: {gemini_url}")
-        else:
-            results['gemini_error'] = "Failed to submit prompt to Gemini or capture URL." # Store Gemini error
-            logger.error(f"Gemini submission failed for event {thread_ts}")
+        while gemini_attempts < 3 and not gemini_url:
+            gemini_attempts += 1
+            try:
+                # No extra flags for Gemini in this version
+                gemini_url = await playwright_handler.submit_prompt_gemini(gemini_page, prompt_text)
+                if gemini_url:
+                    results['gemini_url'] = gemini_url
+                    logger.info(f"Gemini submission successful on attempt {gemini_attempts}, URL: {gemini_url}")
+                    break
+                else:
+                    logger.warning(f"Gemini submission attempt {gemini_attempts} failed (no URL returned). Retrying...")
+            except Exception as e:
+                logger.error(f"Gemini submission attempt {gemini_attempts} failed with exception: {e}. Retrying...", exc_info=False)
+
+            if gemini_attempts < 3:
+                await asyncio.sleep(2)
+
+        if not gemini_url:
+            results['gemini_error'] = f"Failed to submit prompt to Gemini after {gemini_attempts} attempts."
+            logger.error(f"Gemini submission failed after {gemini_attempts} attempts for event {thread_ts}")
     else:
-        results['gemini_error'] = "Gemini browser connection not available." # Store Gemini error
+        results['gemini_error'] = "Gemini browser connection not available."
         logger.warning(f"Gemini page not found or not connected for event {thread_ts}")
 
     # --- Post Final Summary Reply --- #
     slack_handler.post_summary_reply(channel_id, thread_ts, results)
+
+    # --- Screenshot Capture and Upload (E10.T4) --- #
+    if SCREENSHOT_ENABLED:
+        logger.info(f"Starting screenshot capture for successful submissions in thread {thread_ts}")
+        successful_services = {
+            "chatgpt": results.get('chatgpt_url'),
+            "claude": results.get('claude_url'),
+            "gemini": results.get('gemini_url')
+        }
+
+        # Ensure screenshot directory exists (should have been created by playwright handler, but check)
+        if not os.path.exists(SCREENSHOT_DIR):
+            try:
+                os.makedirs(SCREENSHOT_DIR)
+                logger.info(f"Created screenshot directory: {SCREENSHOT_DIR}")
+            except OSError as e:
+                logger.error(f"Could not create screenshot directory {SCREENSHOT_DIR}: {e}. Screenshots disabled for this run.")
+                return # Exit if we can't create the dir
+
+        for service_name, service_url in successful_services.items():
+            if service_url:
+                # Generate unique filename
+                timestamp = time.strftime("%Y%m%d%H%M%S")
+                screenshot_filename = f"{service_name}_{timestamp}_{thread_ts}.png"
+                screenshot_path = os.path.join(SCREENSHOT_DIR, screenshot_filename)
+
+                logger.info(f"Attempting to capture screenshot for {service_name}...")
+                screenshot_success = await playwright_handler.take_screenshot_for_service(
+                    service_name=service_name,
+                    output_path=screenshot_path
+                )
+
+                if screenshot_success:
+                    logger.info(f"Screenshot for {service_name} captured successfully to {screenshot_path}. Attempting upload...")
+                    initial_comment = f"Screenshot for {service_name.capitalize()}:"
+                    upload_success = await slack_handler.upload_screenshot_to_thread(
+                        channel_id=channel_id,
+                        thread_ts=thread_ts,
+                        file_path=screenshot_path,
+                        initial_comment=initial_comment
+                    )
+
+                    if upload_success:
+                        logger.info(f"Screenshot for {service_name} uploaded successfully.")
+                        # Clean up the temporary file
+                        try:
+                            os.remove(screenshot_path)
+                            logger.info(f"Deleted temporary screenshot file: {screenshot_path}")
+                        except OSError as e:
+                            logger.error(f"Failed to delete temporary screenshot file {screenshot_path}: {e}")
+                    else:
+                        logger.error(f"Failed to upload screenshot for {service_name} from {screenshot_path}. File may remain.")
+                else:
+                    logger.error(f"Failed to capture screenshot for {service_name}. Skipping upload.")
+            # else: service_url was None, so skip screenshot
+
+        logger.info(f"Screenshot capture process completed for thread {thread_ts}")
+
+    else:
+        logger.info("Screenshots are disabled globally.")

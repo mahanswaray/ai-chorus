@@ -1,0 +1,60 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Epic 10: Capture & Upload AI Web App Screenshots
+
+**Goal:** After successfully submitting prompts and retrieving URLs for each AI service, capture a full-page screenshot of the resulting chat within its respective browser context and upload it to the original Slack thread.
+
+*   **E10.T1: Temporary Storage Setup:**
+    *   Create a directory `tmp/screenshots` in the project root for temporary image storage.
+    *   **Add `tmp/` to the `.gitignore` file** to prevent committing temporary files or the directory structure.
+*   **E10.T2: Playwright Screenshot Function:**
+    *   **Define a new async function in `app/playwright_handler.py`**, e.g., `take_screenshot_for_service(service_name: str, target_url: str, output_path: str) -> bool`.
+    *   This function should:
+        *   Retrieve the correct `Page` object for the `service_name` using `get_page_for_service`. Handle cases where the page might not be available.
+        *   Navigate the page to the `target_url` (the permalink captured earlier) to ensure the correct chat is visible. Add a reasonable `wait_for_load_state`.
+        *   Attempt to take a full-page screenshot using `page.screenshot(path=output_path, full_page=True, timeout=30000)`. Use a timeout (e.g., 30s) to prevent hangs.
+        *   Wrap the screenshot action in a `try...except` block (catching `PlaywrightTimeoutError`, `Exception`) for robust error handling.
+        *   Return `True` on success, `False` on failure, logging errors appropriately.
+        *   *Consideration:* `full_page=True` might be problematic for very long pages or infinite scroll. For MVP, this is acceptable. If issues arise, future refinement might involve viewport screenshots or scrolling strategies.
+*   **E10.T3: Slack Screenshot Upload Function:**
+    *   **Define a new async function in `app/slack_handler.py`**, e.g., `upload_screenshot_to_thread(channel_id: str, thread_ts: str, file_path: str, initial_comment: str) -> bool`.
+    *   This function should:
+        *   Use the `slack_sdk.WebClient` instance.
+        *   Call `client.files_upload_v2()` with the following parameters:
+            *   `channel=channel_id`
+            *   `thread_ts=thread_ts`
+            *   `file=file_path` (the path to the temporary screenshot file)
+            *   `initial_comment=initial_comment` (e.g., "Screenshot for ChatGPT:")
+            *   Potentially `title` based on the service name or filename.
+        *   Wrap the API call in `try...except SlackApiError` for robust error handling.
+        *   Return `True` on successful upload (checking the API response `ok` field), `False` otherwise, logging errors.
+*   **E10.T4: Background Task Orchestration:**
+    *   **Modify the main background task function in `app/background_processor.py`**.
+    *   After the initial summary message with URLs is posted (or potentially concurrently if desired, but sequential is simpler for MVP), iterate through the services that *successfully* returned a URL.
+    *   For each successful service (e.g., 'chatgpt', 'claude', 'gemini'):
+        *   Generate a unique temporary filename (e.g., using `uuid.uuid4()` or timestamp + service name) within the `tmp/screenshots/` directory. Construct the full `file_path`.
+        *   Retrieve the corresponding `url` from the results dictionary.
+        *   Call `playwright_handler.take_screenshot_for_service(service_name, url, file_path)`.
+        *   If screenshot succeeds (`True`):
+            *   Prepare an `initial_comment` (e.g., f"Screenshot for {service_name.capitalize()}:").
+            *   Call `slack_handler.upload_screenshot_to_thread(channel_id, thread_ts, file_path, initial_comment)`.
+            *   **Crucially:** If the upload succeeds (`True`), delete the temporary file using `os.remove(file_path)` within a `try...except OSError` block. Log success or failure of deletion.
+        *   If screenshot fails (`False`): Log the error (no upload attempt needed).
+*   **E10.T5: Update Final Slack Summary (Optional but Recommended):**
+    *   Consider modifying the initial summary message (`slack_handler.post_summary_reply`) or posting a *final* summary message after all screenshot attempts are done. This message could indicate whether screenshots were successfully captured and uploaded for each service (e.g., "✅ Screenshot uploaded", "❌ Screenshot failed").
+*   **E10.T6: Testing:**
+    *   Run the full E2E setup (uvicorn, browsers logged in, ngrok).
+    *   Send messages (with/without audio).
+    *   **Verify:**
+        *   Screenshots (.png files) are temporarily created in `tmp/screenshots/`.
+        *   Screenshots are uploaded to the correct Slack thread as separate messages.
+        *   Image previews are visible within the Slack thread.
+        *   The `initial_comment` is present for each screenshot message.
+        *   The temporary files in `tmp/screenshots/` are deleted after successful upload.
+    *   **Test Failures:**
+        *   Simulate Playwright screenshot failure (e.g., provide invalid URL or element that causes timeout). Verify error is logged and upload is skipped.
+        *   Simulate Slack upload failure (e.g., temporary network issue, invalid token). Verify error is logged and the temporary file is *not* deleted (or handle cleanup strategy appropriately).
+        *   Verify behavior when only some AI submissions succeed (screenshots should only be attempted for successful ones).

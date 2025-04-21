@@ -3,6 +3,7 @@
 import logging
 import datetime
 import time # Added for small delays
+import os # Added for screenshot path
 from typing import Dict, Optional
 from playwright.async_api import (
     async_playwright,
@@ -169,6 +170,53 @@ async def take_screenshots():
             # get_page_for_service logs the warning if None
             pass
     return saved_screenshots
+
+# --- Start New Screenshot Function (E10.T2) ---
+async def take_screenshot_for_service(
+    service_name: str,
+    output_path: str
+) -> bool:
+    """
+    Takes a full-page screenshot of the specified service's current page state.
+
+    Args:
+        service_name: The name of the AI service (e.g., 'chatgpt', 'claude').
+        output_path: The full path where the screenshot PNG file should be saved.
+
+    Returns:
+        True if the screenshot was successfully taken and saved, False otherwise.
+    """
+    logger.info(f"Attempting full-page screenshot for {service_name}'s current page at {output_path}...")
+    page = get_page_for_service(service_name)
+
+    if not isinstance(page, Page):
+        logger.error(f"Screenshot failed: Could not get a valid page for {service_name}.")
+        return False
+
+    try:
+        # Ensure the output directory exists
+        output_dir = os.path.dirname(output_path)
+        if not os.path.exists(output_dir):
+             try:
+                 os.makedirs(output_dir)
+                 logger.info(f"Created screenshot directory: {output_dir}")
+             except OSError as e:
+                 logger.error(f"Screenshot failed: Could not create directory {output_dir}: {e}")
+                 return False
+
+        # Take the full-page screenshot of the current page
+        logger.info(f"Taking full-page screenshot for {service_name}...")
+        await page.screenshot(path=output_path, full_page=True, timeout=30000)
+        logger.info(f"Screenshot successful for {service_name}: Saved to {output_path}")
+        return True
+
+    except PlaywrightTimeoutError:
+        logger.error(f"Screenshot failed: Timeout occurred while taking screenshot for {service_name} at {output_path}.", exc_info=True)
+        return False
+    except Exception as e:
+        logger.error(f"Screenshot failed: An unexpected error occurred for {service_name}: {e}", exc_info=True)
+        return False
+# --- End New Screenshot Function ---
 
 async def submit_prompt_chatgpt(
     page: Page,

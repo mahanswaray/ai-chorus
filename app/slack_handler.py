@@ -1,5 +1,7 @@
 import logging
+import os # Added for screenshot file operations
 from slack_sdk import WebClient
+from slack_sdk.web.async_client import AsyncWebClient # Import Async client
 from slack_sdk.errors import SlackApiError
 from slack_sdk.signature import SignatureVerifier
 from typing import Optional, Dict, Any, Tuple, List
@@ -332,4 +334,66 @@ def post_summary_reply(channel_id: str, thread_ts: str, results: Dict[str, Any])
         # Optionally, try posting a simple text message as fallback?
         # post_message(channel_id, thread_ts, f"Error displaying results. {fallback_text}")
     except Exception as e:
-        logger.error(f"An unexpected error occurred posting Slack Block Kit summary reply: {e}", exc_info=True) 
+        logger.error(f"An unexpected error occurred posting Slack Block Kit summary reply: {e}", exc_info=True)
+
+# --- Start New Screenshot Upload Function (E10.T3) ---
+async def upload_screenshot_to_thread(
+    channel_id: str,
+    thread_ts: str,
+    file_path: str,
+    initial_comment: str
+) -> bool:
+    """
+    Uploads a screenshot file to a specific Slack thread using the Async client.
+
+    Args:
+        channel_id: The ID of the channel containing the thread.
+        thread_ts: The timestamp of the parent message of the thread.
+        file_path: The local path to the screenshot file to upload.
+        initial_comment: The text comment to post along with the file.
+
+    Returns:
+        True if the file was uploaded successfully, False otherwise.
+    """
+    # Use the async client for this async function
+    async_slack_client = AsyncWebClient(token=config.SLACK_BOT_TOKEN)
+
+    if not async_slack_client.token:
+        logger.error("Cannot upload screenshot: Async Slack client could not be initialized (missing token).")
+        return False
+
+    if not os.path.exists(file_path):
+        logger.error(f"Cannot upload screenshot: File not found at {file_path}")
+        return False
+
+    file_name = os.path.basename(file_path)
+    logger.info(f"Uploading screenshot {file_name} to thread {thread_ts} in channel {channel_id} (using async client)...")
+
+    try:
+        # Use files_upload_v2 method with await
+        response = await async_slack_client.files_upload_v2(
+            channel=channel_id,
+            thread_ts=thread_ts,
+            file=file_path,
+            initial_comment=initial_comment,
+            title=file_name # Use filename as title
+        )
+        if response.get("ok") and response.get("files") and len(response.get("files", [])) > 0:
+            uploaded_file_info = response["files"][0] # Get info about the first (and likely only) uploaded file
+            logger.info(f"Successfully uploaded screenshot: {uploaded_file_info.get('name')}, ID: {uploaded_file_info.get('id')} to thread {thread_ts}")
+            return True
+        else:
+            error_msg = response.get("error", "unknown error")
+            logger.error(f"Slack API error uploading screenshot {file_name}: {error_msg}. Response: {response}")
+            return False
+    except SlackApiError as e:
+        logger.error(f"Slack API error during screenshot upload {file_name}: {e.response['error']}", exc_info=True)
+        return False
+    except FileNotFoundError:
+        # This shouldn't happen due to the check above, but handle defensively
+        logger.error(f"File not found during upload attempt for {file_path}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error uploading screenshot {file_name}: {e}", exc_info=True)
+        return False
+# --- End New Screenshot Upload Function --- 
