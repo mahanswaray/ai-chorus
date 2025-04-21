@@ -2,6 +2,9 @@
 
 A locally running application that listens to Slack messages (including audio), transcribes audio using OpenAI Whisper, and submits the text to multiple AI web applications (ChatGPT, Claude, Gemini) using Playwright browser automation. It posts back the links to the generated conversations and screenshots of the results to the original Slack thread.
 
+![CleanShot 2025-04-21 at 12 10 10@2x](https://github.com/user-attachments/assets/2d22fbe9-3dae-482f-a8f6-8c0b46579e30)
+
+
 ## Table of Contents
 
 *   [Overview](#overview)
@@ -12,7 +15,6 @@ A locally running application that listens to Slack messages (including audio), 
 *   [Running the Application](#running-the-application)
 *   [Configuration](#configuration)
 *   [Usage](#usage)
-*   [Screenshots](#screenshots)
 *   [Testing Strategy](#testing-strategy)
 *   [Code Quality](#code-quality)
 *   [Troubleshooting](#troubleshooting)
