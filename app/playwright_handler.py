@@ -34,6 +34,16 @@ CHATGPT_SEARCH_TOGGLE_SELECTOR = "[data-testid=\"composer-button-search\"]"
 CHATGPT_DEEP_RESEARCH_TOGGLE_SELECTOR = "[data-testid=\"composer-button-deep-research\"]"
 # --- End ChatGPT Specific Selectors ---
 
+# --- Start Claude Specific Selectors (from claude_playwright_integration.mdc) ---
+CLAUDE_NEW_CHAT_BUTTON_SELECTOR = 'a[aria-label="New chat"][href="/new"]'
+CLAUDE_TEXT_INPUT_SELECTOR = '.ProseMirror[contenteditable="true"]'
+CLAUDE_SETTINGS_BUTTON_SELECTOR = 'button[data-testid="input-menu-tools"]'
+CLAUDE_EXTENDED_THINKING_TOGGLE_BUTTON_SELECTOR = 'button:has(p:text-is("Extended thinking"))'
+CLAUDE_EXTENDED_THINKING_CHECKBOX_SELECTOR = 'input[type="checkbox"]' # Relative to button
+CLAUDE_SUBMIT_BUTTON_SELECTOR = 'button[aria-label="Send message"]'
+CLAUDE_CHAT_URL_PATTERN = "**/chat/**"
+# --- End Claude Specific Selectors ---
+
 async def initialize_playwright_connections():
     """
     Initializes Playwright and connects to the pre-launched Chrome instances
@@ -277,6 +287,7 @@ async def submit_prompt_chatgpt(
         final_url = page.url
         end_time = time.time()
         logger.info(f"Successfully submitted to ChatGPT and captured URL: {final_url} (took {end_time - start_time:.2f}s)")
+        logger.info(f"ChatGPT submission completed in {time.time() - start_time:.2f} seconds. URL: {final_url}")
         return final_url
 
     except PlaywrightTimeoutError as e:
@@ -289,4 +300,98 @@ async def submit_prompt_chatgpt(
         return None
     except Exception as e:
         logger.exception(f"An unexpected error occurred during ChatGPT submission: {e}", exc_info=True)
+        return None
+
+async def submit_prompt_claude(
+    page: Page,
+    prompt: str,
+    use_extended_thinking: bool = False,
+) -> Optional[str]:
+    """
+    Submits a prompt to the Claude web UI using Playwright.
+
+    Args:
+        page: The Playwright Page object connected to Claude.
+        prompt: The text prompt to submit.
+        use_extended_thinking: If True, ensures the "Extended thinking" toggle is ON.
+                                If False (default), ensures it is OFF.
+
+    Returns:
+        The URL of the new chat session, or None if an error occurred.
+    """
+    service_name = "claude" # Hardcoded for this function
+    logger.info(f"Starting Claude submission for prompt: '{prompt[:50]}...'")
+    start_time = time.time()
+
+    try:
+        # 1. Click New Chat button
+        logger.info(f"Locating Claude New Chat button: {CLAUDE_NEW_CHAT_BUTTON_SELECTOR}")
+        new_chat_button = page.locator(CLAUDE_NEW_CHAT_BUTTON_SELECTOR)
+        await expect(new_chat_button).to_be_visible(timeout=10000)
+        logger.info("Claude New Chat button located. Clicking...")
+        await new_chat_button.click()
+        logger.info(f"Waiting for Claude input area ({CLAUDE_TEXT_INPUT_SELECTOR}) to be visible after New Chat click...")
+        input_area = page.locator(CLAUDE_TEXT_INPUT_SELECTOR)
+        await expect(input_area).to_be_visible(timeout=15000) # Increased wait slightly
+        logger.info("Claude input area ready.")
+        await page.wait_for_timeout(500)
+
+        # 2. Open Settings Popover & Check/Toggle Extended Thinking
+        logger.info(f"Locating Claude settings button: {CLAUDE_SETTINGS_BUTTON_SELECTOR}")
+        settings_button = page.locator(CLAUDE_SETTINGS_BUTTON_SELECTOR)
+        await expect(settings_button).to_be_visible(timeout=10000)
+        logger.info("Claude settings button located. Clicking to open popover...")
+        await settings_button.click()
+        await page.wait_for_timeout(500) # Allow popover to animate
+
+        logger.info(f"Locating Claude Extended Thinking toggle button: {CLAUDE_EXTENDED_THINKING_TOGGLE_BUTTON_SELECTOR}")
+        extended_thinking_button = page.locator(CLAUDE_EXTENDED_THINKING_TOGGLE_BUTTON_SELECTOR)
+        await expect(extended_thinking_button).to_be_visible(timeout=10000)
+        logger.info("Claude Extended Thinking toggle button located.")
+
+        checkbox_input = extended_thinking_button.locator(CLAUDE_EXTENDED_THINKING_CHECKBOX_SELECTOR)
+        current_state = await checkbox_input.is_checked() # Needs await for async
+        logger.info(f"Current Claude Extended Thinking checked state from input: {current_state}")
+
+        if current_state != use_extended_thinking:
+            logger.info(f"Current Claude state ({current_state}) differs from desired ({use_extended_thinking}). Clicking toggle button...")
+            await extended_thinking_button.click()
+            checkbox_input_after_click = extended_thinking_button.locator(CLAUDE_EXTENDED_THINKING_CHECKBOX_SELECTOR)
+            await expect(checkbox_input_after_click).to_be_checked(checked=use_extended_thinking, timeout=5000)
+            logger.info(f"Claude Extended Thinking toggle state successfully changed to {use_extended_thinking}.")
+        else:
+            logger.info(f"Claude Extended Thinking state is already the desired value ({use_extended_thinking}). No action needed.")
+
+        # 4. Close Settings Popover (Clicking input area)
+        logger.info("Closing Claude popover by clicking input area...")
+        await input_area.click() # Assumption: Clicking input closes popover
+        await page.wait_for_timeout(500)
+
+        # 5. Fill the input area
+        logger.info(f"Filling Claude input area with prompt: '{prompt[:50]}...'")
+        await input_area.fill(prompt)
+        await page.wait_for_timeout(500) # Pause after fill, was 1s in test script
+
+        # 6. Locate and click submit button
+        logger.info(f"Locating Claude submit button: {CLAUDE_SUBMIT_BUTTON_SELECTOR}")
+        submit_button = page.locator(CLAUDE_SUBMIT_BUTTON_SELECTOR)
+        logger.info("Waiting for Claude submit button to be enabled (no 'disabled' attribute)...")
+        await expect(submit_button).not_to_have_attribute("disabled", "", timeout=10000) # Check attribute absence
+        logger.info("Claude submit button located and enabled.")
+        logger.info("Clicking Claude submit button...")
+        await submit_button.click()
+
+        # 7. Wait for navigation to the new chat URL
+        logger.info(f"Waiting for Claude URL to match pattern: {CLAUDE_CHAT_URL_PATTERN}")
+        # Use a long timeout as response generation can take time, esp. w/ extended thinking
+        await page.wait_for_url(CLAUDE_CHAT_URL_PATTERN, timeout=90000)
+        final_url = page.url
+        logger.info(f"Claude submission completed in {time.time() - start_time:.2f} seconds. URL: {final_url}")
+        return final_url
+
+    except PlaywrightTimeoutError as e:
+        logger.error(f"Playwright TimeoutError during Claude submission: {e}", exc_info=True)
+        return None
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred during Claude submission: {e}", exc_info=True)
         return None 

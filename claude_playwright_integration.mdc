@@ -1,0 +1,62 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Rule: Claude Playwright Integration Details
+
+**Goal:** Consolidate findings from Epic 6 regarding the Claude (claude.ai) web UI analysis and Playwright scripting logic for use in the main application (`app/playwright_handler.py`).
+
+## 1. UI Flow & Logic
+
+The sequence for submitting a prompt via Playwright to a logged-in Claude instance, optionally enabling "Extended thinking", is:
+
+1.  **Connect & Find Page:** Connect to the browser via CDP and locate the correct page object whose URL contains `claude.ai`.
+2.  **Start New Chat:** Click the "+ New chat" button to ensure a clean state. Wait for the main input area to become visible.
+3.  **(Optional) Toggle Extended Thinking:**
+    *   Click the Settings button (sliders icon) near the input area.
+    *   Wait for the settings popover content to be visible.
+    *   Locate the "Extended thinking" button element within the popover.
+    *   Find the `input[type="checkbox"]` *within* that button.
+    *   Check the state using `checkbox_input.is_checked()`.
+    *   If the current state doesn't match the desired state (e.g., `True` for ON), click the *parent button element* to toggle it.
+    *   Wait for the nested checkbox state to reflect the change using `expect(checkbox_input).to_be_checked(checked=desired_state)`.
+    *   Click the main text input area to close the popover (or another suitable element if this proves unreliable).
+4.  **Enter Prompt:** Locate the main text input area (`.ProseMirror[contenteditable="true"]`) and fill it with the prompt text.
+5.  **Submit Prompt:**
+    *   Locate the Submit button (upward arrow).
+    *   Wait for the Submit button *not* to have the `disabled` attribute (i.e., wait for it to be enabled).
+    *   Click the Submit button.
+6.  **Wait for Result & Capture URL:** Wait for the page URL to change to the pattern `**/chat/**`, indicating the new chat session has been created. Capture the `page.url`.
+
+## 2. Key Selectors
+
+*   **New Chat Button:** `a[aria-label="New chat"][href="/new"]`
+*   **Text Input Area:** `.ProseMirror[contenteditable="true"]`
+*   **Settings Button (Opens Popover):** `button[data-testid="input-menu-tools"]`
+*   **Extended Thinking Toggle Button (in popover):** `button:has(p:text-is("Extended thinking"))`
+    *   *Note:* This uses the `:has()` pseudo-class. Ensure Playwright version supports this or use an alternative like XPath if needed.
+*   **Extended Thinking Checkbox (within button):** `input[type="checkbox"]` (located *relative* to the toggle button)
+*   **Submit Button:** `button[aria-label="Send message"]`
+
+## 3. State Checking
+
+*   **Extended Thinking Toggle:** Check the state of the nested `input[type="checkbox"]` using `locator.is_checked()`. Wait for state change using `expect(locator).to_be_checked(checked=...)`.
+*   **Submit Button Enabled:** Check for the *absence* of the `disabled` attribute using `expect(locator).not_to_have_attribute("disabled", ...)`.
+
+## 4. Playwright Commands & Waiting Strategy
+
+*   **Page Finding:** Iterate through `context.pages` and find the one where `page.url` contains `claude.ai`.
+*   **Waiting:**
+    *   Use `expect(locator).to_be_visible(timeout=...)` before interacting.
+    *   Use `expect(locator).not_to_have_attribute("disabled", ..., timeout=...)` for the submit button before clicking.
+    *   Use `expect(locator).to_be_checked(checked=..., timeout=...)` after clicking the toggle button to confirm state change.
+    *   Use `page.wait_for_url("**/chat/**", timeout=...)` as the primary mechanism to detect successful submission and get the permalink. A longer timeout (e.g., 90 seconds) is recommended here, especially if Extended Thinking is enabled.
+    *   Use short `time.sleep(0.5)` pauses sparingly after clicks (like opening/closing the popover) if the UI needs a moment to settle, but prefer explicit waits.
+*   **Error Handling:** Implement `try...except PlaywrightTimeoutError` and general `Exception` blocks. Disconnect the browser (`browser.close()`) in a `finally` block.
+
+## 5. Implementation Notes
+
+*   These selectors and logic should be implemented within async functions in `app/playwright_handler.py`, likely `submit_prompt_claude(page: Page, prompt: str, use_extended_thinking: bool = False) -> str | None`.
+*   Remember that the browser must be connected via CDP, and the user must be logged in. Connection is handled via `p.chromium.connect_over_cdp(url)`.
+*   Toggling "Extended thinking" should be an optional parameter.

@@ -171,71 +171,142 @@ def post_message(channel_id: str, thread_ts: str, text: str):
         logger.error(f"An unexpected error occurred posting Slack message: {e}")
 
 def post_summary_reply(channel_id: str, thread_ts: str, results: Dict[str, Any]):
-    """Posts a formatted summary of the processing results back to the Slack thread."""
+    """Posts a formatted summary of the processing results back to the Slack thread using Block Kit."""
     if not slack_client:
         logger.error("Cannot post summary reply: Slack client not initialized.")
         return
 
-    logger.info(f"Posting summary reply to thread {thread_ts} in channel {channel_id}")
+    logger.info(f"Posting summary reply (Block Kit) to thread {thread_ts} in channel {channel_id}")
 
-    # Build the message text - NEW ORDER: Links first, then transcript/text
-    message_parts = []
+    blocks = []
+    actions_elements = [] # To hold buttons
 
-    # 1. Add AI Service Results (Links/Errors)
+    # --- 1. Build Buttons ---
     chatgpt_url = results.get('chatgpt_url')
     chatgpt_error = results.get('chatgpt_error')
+    claude_url = results.get('claude_url')
+    claude_error = results.get('claude_error')
+    # Add other services here...
 
     if chatgpt_url:
-        # Simple link format for better unfurling potential (though we disable it)
-        message_parts.append(f":chatgpt: *ChatGPT:* <{chatgpt_url}|View Chat>")
+        actions_elements.append({
+            "type": "button",
+            "text": {
+                "type": "plain_text",
+                "text": ":chatgpt: ChatGPT", # Keep emoji if possible
+                "emoji": True
+            },
+            "url": chatgpt_url,
+            "action_id": f"link_chatgpt_{thread_ts}" # Unique ID per message
+        })
     elif chatgpt_error:
-         message_parts.append(f":warning: *ChatGPT Error:* _{chatgpt_error}_")
-    # else: # Optionally add a placeholder if needed
-        # message_parts.append(":chatgpt: *ChatGPT:* _Not processed or status unknown._")
+        # Add error text later in a context block
+        pass
 
-    # Add placeholders for other services (future epics)
-    # if results.get('claude_url'): message_parts.append(f":claude: *Claude:* <{results['claude_url']}|View Chat>")
-    # elif results.get('claude_error'): message_parts.append(f":warning: *Claude Error:* _{results['claude_error']}_")
+    if claude_url:
+        actions_elements.append({
+            "type": "button",
+            "text": {
+                "type": "plain_text",
+                "text": ":claude: Claude", # Using :claude: emoji approximation
+                "emoji": True
+            },
+            "url": claude_url,
+            "action_id": f"link_claude_{thread_ts}" # Unique ID
+        })
+    elif claude_error:
+        # Add error text later
+        pass
 
-    # Add a separator if there were links AND there will be text below
-    has_links_or_errors = bool(chatgpt_url or chatgpt_error) # Add other services here later
-    has_text_content = bool(results.get('transcript') or results.get('original_text') or results.get('transcript_error'))
+    # Add the actions block if there are any buttons
+    if actions_elements:
+        blocks.append({
+            "type": "actions",
+            "elements": actions_elements
+        })
 
-    if has_links_or_errors and has_text_content:
-        message_parts.append("\n---") # Separator
+    # --- 2. Add Separator if needed ---
+    has_buttons = bool(actions_elements)
+    has_text_content = bool(results.get('transcript') or results.get('original_text') or results.get('transcript_error') or chatgpt_error or claude_error) # Include errors here
 
-    # 2. Add Transcript/Original Text/Error (Code Block for Text)
+    if has_buttons and has_text_content:
+         blocks.append({"type": "divider"})
+
+    # --- 3. Add Transcript/Original Text/Errors ---
     transcript = results.get('transcript')
     original_text = results.get('original_text')
     transcript_error = results.get('transcript_error')
 
+    text_block_content = ""
     if transcript:
-        message_parts.append(f"*Transcript:*\n```\n{transcript}\n```")
+        text_block_content = f"*Transcript:*\n```\n{transcript}\n```"
     elif original_text:
-         message_parts.append(f"*Original Text:*\n```\n{original_text}\n```")
-    elif transcript_error:
-        # Keep error message format simple
-        message_parts.append(f":warning: *Transcription Failed:* _{transcript_error}_ ")
-    # else: # Don't add anything if there was no text/transcript/error
-        # pass
+         text_block_content = f"*Original Text:*\n```\n{original_text}\n```"
+    # If there was only a transcript error, display it prominently
+    elif transcript_error and not original_text:
+         text_block_content = f":warning: *Transcription Failed:* _{transcript_error}_"
 
-    final_text = "\n".join(message_parts)
+    if text_block_content:
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": text_block_content
+            }
+        })
 
-    # Only post if there is something to say
-    if not final_text.strip():
-        logger.warning(f"No content generated for summary reply in thread {thread_ts}. Skipping post.")
+    # --- 4. Add Context block for errors (if not already displayed) ---
+    error_elements = []
+    if chatgpt_error:
+        error_elements.append({
+            "type": "mrkdwn",
+            "text": f":warning: *ChatGPT Error:* _{chatgpt_error}_"
+        })
+    if claude_error:
+        error_elements.append({
+            "type": "mrkdwn",
+            "text": f":warning: *Claude Error:* _{claude_error}_"
+        })
+    # Add transcript error here ONLY if there was also original text (otherwise it's in the main section)
+    if transcript_error and original_text:
+         error_elements.append({
+            "type": "mrkdwn",
+            "text": f":warning: *Transcription Failed:* _{transcript_error}_"
+        })
+
+    if error_elements:
+        blocks.append({
+            "type": "context",
+            "elements": error_elements
+        })
+
+
+    # --- 5. Post the Message ---
+    # Fallback text for notifications
+    fallback_text = "AI Chorus results:"
+    if transcript: fallback_text += f" Transcript: {transcript[:50]}..."
+    elif original_text: fallback_text += f" Original: {original_text[:50]}..."
+    if chatgpt_url: fallback_text += " (ChatGPT Link)"
+    if claude_url: fallback_text += " (Claude Link)"
+
+
+    if not blocks:
+        logger.warning(f"No blocks generated for summary reply in thread {thread_ts}. Skipping post.")
         return
 
     try:
         response = slack_client.chat_postMessage(
             channel=channel_id,
-            text=final_text,
             thread_ts=thread_ts,
-            unfurl_links=False, # Keep unfurling disabled for now
+            text=fallback_text,  # Fallback text for notifications
+            blocks=blocks,
+            unfurl_links=False,
             unfurl_media=False
         )
-        logger.info(f"Successfully posted summary reply to thread {thread_ts}")
+        logger.info(f"Successfully posted Block Kit summary reply to thread {thread_ts}")
     except SlackApiError as e:
-        logger.error(f"Error posting Slack summary reply: {e.response['error']}")
+        logger.error(f"Error posting Slack Block Kit summary reply: {e.response['error']}")
+        # Optionally, try posting a simple text message as fallback?
+        # post_message(channel_id, thread_ts, f"Error displaying results. {fallback_text}")
     except Exception as e:
-        logger.error(f"An unexpected error occurred posting Slack summary reply: {e}", exc_info=True) 
+        logger.error(f"An unexpected error occurred posting Slack Block Kit summary reply: {e}", exc_info=True) 

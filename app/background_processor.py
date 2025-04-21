@@ -23,6 +23,8 @@ async def process_message_event(event: Dict[str, Any]):
         'transcript_error': None,
         'chatgpt_url': None,
         'chatgpt_error': None,
+        'claude_url': None,
+        'claude_error': None,
         # Add keys for other services later as needed
     }
 
@@ -70,19 +72,36 @@ async def process_message_event(event: Dict[str, Any]):
         logger.info("BACKGROUND: No audio file found or suitable for processing.")
 
     # --- Determine Text for AI Prompt --- #
-    prompt_text = results.get('transcript') or results.get('original_text')
+    # Combine original text and transcript if both are present
+    original_text = results.get('original_text')
+    transcript = results.get('transcript')
+    prompt_parts = []
+    if original_text:
+        prompt_parts.append(f"Original Text:\n{original_text}")
+    if transcript:
+        prompt_parts.append(f"Transcript:\n{transcript}")
 
+    # Combine with a clear separator
+    prompt_text = "\n\n---\n\n".join(prompt_parts)
+
+    # Handle cases with only errors or no text at all
     if not prompt_text:
-        # If there was a transcription error but no original text, use the error
-        if results.get('transcript_error') and not results.get('original_text'):
-            prompt_text = f"(Note: Transcription failed: {results['transcript_error']})"
+        # If there was a transcription error but no original text, use the error message
+        # (If there was original text, the transcript error will be shown in the summary)
+        transcript_error = results.get('transcript_error')
+        if transcript_error and not original_text:
+            # We won't send this error message to the AI, just log and post summary
+            logger.warning(f"Transcription failed and no original text for event {thread_ts}. Skipping AI submission.")
+            # Post summary with errors
+            slack_handler.post_summary_reply(channel_id, thread_ts, results)
+            return
         else:
             logger.warning(f"No transcript or original text available for event {thread_ts}. Skipping AI submission.")
             # Still post summary with errors if any
             slack_handler.post_summary_reply(channel_id, thread_ts, results)
             return
 
-    logger.info(f"Using prompt text for AI submission: '{prompt_text[:50]}...'")
+    logger.info(f"Using combined prompt text for AI submission: '{prompt_text[:100]}...'")
 
     # --- Playwright Submission (ChatGPT) --- #
     chatgpt_page = playwright_handler.get_page_for_service("chatgpt")
@@ -90,7 +109,7 @@ async def process_message_event(event: Dict[str, Any]):
     if chatgpt_page:
         logger.info("ChatGPT page found. Attempting submission...")
         # TODO: Potentially parse user_text for flags like !model=gpt-4o or !search=on
-        chatgpt_url = await playwright_handler.submit_prompt_chatgpt(chatgpt_page, prompt_text)
+        chatgpt_url = await playwright_handler.submit_prompt_chatgpt(chatgpt_page, prompt_text, model_suffix='o4-mini', enable_search=True)
         if chatgpt_url:
             results['chatgpt_url'] = chatgpt_url
             logger.info(f"ChatGPT submission successful, URL: {chatgpt_url}")
@@ -102,6 +121,23 @@ async def process_message_event(event: Dict[str, Any]):
         logger.warning(f"ChatGPT page not found or not connected for event {thread_ts}")
 
     # --- Add other AI service calls here in future epics ---
+    # --- Playwright Submission (Claude) --- #
+    claude_page = playwright_handler.get_page_for_service("claude")
+
+    if claude_page:
+        logger.info("Claude page found. Attempting submission...")
+        # TODO: Add logic to parse prompt_text for flags like !extended=on if needed
+        # For now, default use_extended_thinking to False
+        claude_url = await playwright_handler.submit_prompt_claude(claude_page, prompt_text, use_extended_thinking=False)
+        if claude_url:
+            results['claude_url'] = claude_url # Store Claude URL
+            logger.info(f"Claude submission successful, URL: {claude_url}")
+        else:
+            results['claude_error'] = "Failed to submit prompt to Claude or capture URL." # Store Claude error
+            logger.error(f"Claude submission failed for event {thread_ts}")
+    else:
+        results['claude_error'] = "Claude browser connection not available." # Store Claude error
+        logger.warning(f"Claude page not found or not connected for event {thread_ts}")
 
     # --- Post Final Summary Reply --- #
     slack_handler.post_summary_reply(channel_id, thread_ts, results)
