@@ -28,7 +28,7 @@ _playwright_instance: Optional[Playwright] = None
 CHATGPT_INPUT_SELECTOR = "#prompt-textarea[contenteditable=\"true\"]"
 CHATGPT_SUBMIT_BUTTON_SELECTOR = "button[data-testid=\"send-button\"]"
 CHATGPT_URL_PATTERN = "**/c/**" # Pattern for the new chat URL
-CHATGPT_NEW_CHAT_BUTTON_SELECTOR = "button[data-testid=\"create-new-chat-button\"]"
+CHATGPT_NEW_CHAT_BUTTON_SELECTOR = "a[data-testid=\"create-new-chat-button\"]"
 CHATGPT_MODEL_SWITCHER_SELECTOR = "[data-testid=\"model-switcher-dropdown-button\"]"
 CHATGPT_MODEL_OPTION_SELECTOR_TPL = "div[data-testid=\"model-switcher-{model_suffix}\"]"
 CHATGPT_SEARCH_TOGGLE_SELECTOR = "[data-testid=\"composer-button-search\"]"

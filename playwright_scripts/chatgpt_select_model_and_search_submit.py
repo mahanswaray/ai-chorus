@@ -20,7 +20,7 @@ SEARCH_TOGGLE_SELECTOR = "[data-testid=\"composer-button-search\"]"
 INPUT_SELECTOR = "#prompt-textarea[contenteditable=\"true\"]"
 SUBMIT_BUTTON_SELECTOR = "button[data-testid=\"send-button\"]"
 URL_PATTERN = "**/c/**"
-NEW_CHAT_BUTTON_SELECTOR = "button[data-testid=\"create-new-chat-button\"]"
+NEW_CHAT_BUTTON_SELECTOR = "a[data-testid=\"create-new-chat-button\"]"
 
 print(f"Attempting to connect to browser at {CONNECTION_URL}...")
 
