@@ -44,6 +44,14 @@ CLAUDE_SUBMIT_BUTTON_SELECTOR = 'button[aria-label="Send message"]'
 CLAUDE_CHAT_URL_PATTERN = "**/chat/**"
 # --- End Claude Specific Selectors ---
 
+# --- Start Gemini Specific Selectors (from gemini_playwright_integration.mdc) ---
+GEMINI_NEW_CHAT_BUTTON_SELECTOR = 'expandable-button[data-test-id="new-chat-button"] button:not([disabled])'
+GEMINI_TEXT_INPUT_SELECTOR = 'div.ql-editor[role="textbox"][aria-label="Enter a prompt here"]'
+GEMINI_SUBMIT_BUTTON_ENABLED_SELECTOR = 'button[aria-label="Send message"]:not([aria-disabled="true"])'
+# Used for waiting strategy:
+GEMINI_THINKING_INDICATOR_SELECTOR = "model-thoughts"
+# --- End Gemini Specific Selectors ---
+
 async def initialize_playwright_connections():
     """
     Initializes Playwright and connects to the pre-launched Chrome instances
@@ -394,4 +402,79 @@ async def submit_prompt_claude(
         return None
     except Exception as e:
         logger.exception(f"An unexpected error occurred during Claude submission: {e}", exc_info=True)
+        return None
+
+async def submit_prompt_gemini(
+    page: Page,
+    prompt: str,
+) -> Optional[str]:
+    """
+    Submits a prompt to the Gemini web UI using Playwright.
+
+    Args:
+        page: The Playwright Page object connected to Gemini.
+        prompt: The text prompt to submit.
+
+    Returns:
+        The URL of the new chat session, or None if an error occurred.
+    """
+    service_name = "gemini" # Hardcoded for this function
+    logger.info(f"Starting Gemini submission for prompt: '{prompt[:50]}...'")
+    start_time = time.time()
+
+    try:
+        # 1. Ensure New Chat State (Optional but recommended)
+        try:
+            logger.info(f"Checking for Gemini New Chat button: {GEMINI_NEW_CHAT_BUTTON_SELECTOR}")
+            new_chat_button = page.locator(GEMINI_NEW_CHAT_BUTTON_SELECTOR)
+            await expect(new_chat_button).to_be_visible(timeout=5000) # Short timeout
+            logger.info("Gemini New Chat button visible and enabled. Clicking...")
+            await new_chat_button.click()
+            logger.info(f"Waiting for Gemini input area ({GEMINI_TEXT_INPUT_SELECTOR}) to be visible after ensuring new chat...")
+            await expect(page.locator(GEMINI_TEXT_INPUT_SELECTOR)).to_be_visible(timeout=10000)
+            logger.info("Gemini input area ready for new chat.")
+            await page.wait_for_timeout(500) # Small pause
+        except PlaywrightTimeoutError:
+            logger.info("Gemini New Chat button not found or not needed. Assuming current state is new chat ready.")
+            # Still wait for input area just in case
+            logger.info(f"Waiting for Gemini input area ({GEMINI_TEXT_INPUT_SELECTOR}) to be visible...")
+            await expect(page.locator(GEMINI_TEXT_INPUT_SELECTOR)).to_be_visible(timeout=10000)
+            logger.info("Gemini input area ready.")
+            await page.wait_for_timeout(500) # Small pause
+
+        # 2. Locate and fill the input area
+        logger.info(f"Locating Gemini input area: {GEMINI_TEXT_INPUT_SELECTOR}")
+        input_area = page.locator(GEMINI_TEXT_INPUT_SELECTOR)
+        logger.info("Gemini input area located. Filling with prompt...")
+        await input_area.fill(prompt)
+        await page.wait_for_timeout(500) # Pause after fill
+
+        # 3. Locate and wait for the submit button to be enabled
+        logger.info(f"Locating enabled Gemini submit button: {GEMINI_SUBMIT_BUTTON_ENABLED_SELECTOR}")
+        submit_button = page.locator(GEMINI_SUBMIT_BUTTON_ENABLED_SELECTOR)
+        await expect(submit_button).to_be_enabled(timeout=10000) # Wait specifically for enabled state
+        logger.info("Gemini submit button located and enabled.")
+
+        # 4. Click submit
+        logger.info("Clicking Gemini submit button...")
+        await submit_button.click()
+
+        # 5. Wait for "thinking" indicator to appear
+        logger.info(f"Waiting for Gemini thinking element ({GEMINI_THINKING_INDICATOR_SELECTOR}) to become visible...")
+        # Use .first because there might be multiple responses/thoughts on the page eventually
+        thinking_element = page.locator(GEMINI_THINKING_INDICATOR_SELECTOR).first
+        await thinking_element.wait_for(state='visible', timeout=90000) # Wait up to 90s
+        logger.info("Gemini thinking element is visible.")
+
+        # 6. Capture URL now that thinking has started (and URL likely updated)
+        final_url = page.url
+        logger.info(f"Gemini submission completed in {time.time() - start_time:.2f} seconds. URL: {final_url}")
+        return final_url
+
+    except PlaywrightTimeoutError as e:
+        logger.error(f"Playwright TimeoutError during Gemini submission: {e}", exc_info=True)
+        # Consider adding screenshot capture here too
+        return None
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred during Gemini submission: {e}", exc_info=True)
         return None 

@@ -187,6 +187,8 @@ def post_summary_reply(channel_id: str, thread_ts: str, results: Dict[str, Any])
     claude_url = results.get('claude_url')
     claude_error = results.get('claude_error')
     # Add other services here...
+    gemini_url = results.get('gemini_url')
+    gemini_error = results.get('gemini_error')
 
     if chatgpt_url:
         actions_elements.append({
@@ -218,6 +220,21 @@ def post_summary_reply(channel_id: str, thread_ts: str, results: Dict[str, Any])
         # Add error text later
         pass
 
+    if gemini_url:
+        actions_elements.append({
+            "type": "button",
+            "text": {
+                "type": "plain_text",
+                "text": ":google-gemini: Gemini", # Using sparkles emoji for Gemini
+                "emoji": True
+            },
+            "url": gemini_url,
+            "action_id": f"link_gemini_{thread_ts}" # Unique ID
+        })
+    elif gemini_error:
+        # Add error text later
+        pass
+
     # Add the actions block if there are any buttons
     if actions_elements:
         blocks.append({
@@ -227,7 +244,7 @@ def post_summary_reply(channel_id: str, thread_ts: str, results: Dict[str, Any])
 
     # --- 2. Add Separator if needed ---
     has_buttons = bool(actions_elements)
-    has_text_content = bool(results.get('transcript') or results.get('original_text') or results.get('transcript_error') or chatgpt_error or claude_error) # Include errors here
+    has_text_content = bool(results.get('transcript') or results.get('original_text') or results.get('transcript_error') or chatgpt_error or claude_error or gemini_error) # Include errors here
 
     if has_buttons and has_text_content:
          blocks.append({"type": "divider"})
@@ -268,6 +285,11 @@ def post_summary_reply(channel_id: str, thread_ts: str, results: Dict[str, Any])
             "text": f":warning: *Claude Error:* _{claude_error}_"
         })
     # Add transcript error here ONLY if there was also original text (otherwise it's in the main section)
+    if gemini_error:
+        error_elements.append({
+            "type": "mrkdwn",
+            "text": f":warning: *Gemini Error:* _{gemini_error}_"
+        })
     if transcript_error and original_text:
          error_elements.append({
             "type": "mrkdwn",
@@ -288,6 +310,7 @@ def post_summary_reply(channel_id: str, thread_ts: str, results: Dict[str, Any])
     elif original_text: fallback_text += f" Original: {original_text[:50]}..."
     if chatgpt_url: fallback_text += " (ChatGPT Link)"
     if claude_url: fallback_text += " (Claude Link)"
+    if gemini_url: fallback_text += " (Gemini Link)"
 
 
     if not blocks:

@@ -26,6 +26,8 @@ async def process_message_event(event: Dict[str, Any]):
         'claude_url': None,
         'claude_error': None,
         # Add keys for other services later as needed
+        'gemini_url': None,
+        'gemini_error': None,
     }
 
     if not channel_id or not thread_ts:
@@ -138,6 +140,23 @@ async def process_message_event(event: Dict[str, Any]):
     else:
         results['claude_error'] = "Claude browser connection not available." # Store Claude error
         logger.warning(f"Claude page not found or not connected for event {thread_ts}")
+
+    # --- Playwright Submission (Gemini) --- #
+    gemini_page = playwright_handler.get_page_for_service("gemini")
+
+    if gemini_page:
+        logger.info("Gemini page found. Attempting submission...")
+        # No extra flags for Gemini in this version
+        gemini_url = await playwright_handler.submit_prompt_gemini(gemini_page, prompt_text)
+        if gemini_url:
+            results['gemini_url'] = gemini_url # Store Gemini URL
+            logger.info(f"Gemini submission successful, URL: {gemini_url}")
+        else:
+            results['gemini_error'] = "Failed to submit prompt to Gemini or capture URL." # Store Gemini error
+            logger.error(f"Gemini submission failed for event {thread_ts}")
+    else:
+        results['gemini_error'] = "Gemini browser connection not available." # Store Gemini error
+        logger.warning(f"Gemini page not found or not connected for event {thread_ts}")
 
     # --- Post Final Summary Reply --- #
     slack_handler.post_summary_reply(channel_id, thread_ts, results)
