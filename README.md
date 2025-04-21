@@ -109,60 +109,109 @@ graph TD
     CHROME_DEBUG_PORT_CHATGPT=9222
     CHROME_DEBUG_PORT_CLAUDE=9223
     CHROME_DEBUG_PORT_GEMINI=9224
-    # TARGET_SLACK_CHANNEL_ID=C... (Optional)
     ```
+
+6.  **Configure Slack Event Subscription:**
+    * Run `ngrok http 8000` temporarily in a separate terminal to get a public URL (e.g., `https://<random-string>.ngrok-free.app`). 
+    * Use the url for the following manifest and ceate a Slack App
+        ```json
+        {
+            "display_information": {
+                "name": "ChorusAI"
+            },
+            "features": {
+                "bot_user": {
+                    "display_name": "ChorusAI",
+                    "always_online": false
+                }
+            },
+            "oauth_config": {
+                "scopes": {
+                    "bot": [
+                        "app_mentions:read",
+                        "channels:history",
+                        "chat:write",
+                        "files:read",
+                        "files:write",
+                        "remote_files:write"
+                    ]
+                }
+            },
+            "settings": {
+                "event_subscriptions": {
+                    "request_url": "https://YOUR_NGROK/slack/events",
+                    "bot_events": [
+                        "message.channels"
+                    ]
+                },
+                "org_deploy_enabled": false,
+                "socket_mode_enabled": false,
+                "token_rotation_enabled": false
+            }
+        }
+        ```
 
 ## Running the Application
 
+This involves a one-time browser profile setup and then the regular process of launching the script, server, and tunnel.
+
+**1. Initial Browser Profile Setup (One-Time Only):**
+
+This step ensures the application can interact with browser instances where you are already logged into the necessary AI services.
+
+*   **Create a Dedicated Chrome Profile:**
+    *   Open Google Chrome normally.
+    *   Click the profile icon (usually top-right) -> Add -> Continue without an account.
+    *   Give the profile a distinct name (e.g., "AI Chorus Apps") and customize if desired.
+*   **Log In to AI Services:**
+    *   Using **only this new Chrome profile**, navigate to and log in to:
+        *   `https://chat.openai.com`
+        *   `https://claude.ai`
+        *   `https://gemini.google.com`
+    *   Ensure you are fully logged in and past any introductory screens.
+*   **Identify Profile Path:**
+    *   You need the main Chrome user data directory and the specific profile folder name for the profile you just created.
+    *   Navigate to `chrome://version` in your **new** Chrome profile.
+    *   Find the **"Profile Path"**. It will look something like:
+        *   macOS: `/Users/<your_username>/Library/Application Support/Google/Chrome/Profile X`
+        *   Windows: `C:\Users\<your_username>\AppData\Local\Google\Chrome\User Data\Profile X`
+        *   Linux: `/home/<your_username>/.config/google-chrome/Profile X`
+    *   Note down:
+        *   The **User Data Directory** (the part *before* `/Profile X`, e.g., `/Users/<your_username>/Library/Application Support/Google/Chrome`).
+        *   The **Profile Name** (the directory name itself, e.g., `Profile 3`, `Profile 1`, or the name you gave it if it appears like `Default`).
+*   **Configure `start_ai_browsers.sh`:**
+    *   Open the `start_ai_browsers.sh` script in a text editor.
+    *   Update the `SOURCE_USER_DATA_DIR` variable to match the **User Data Directory** you found.
+    *   Update the `PROFILE_NAME` variable to match the **Profile Name** directory you found.
+    *   *Optional:* Adjust the `BACKUP_BASE_DIR` if you want the temporary profile copies stored elsewhere.
+    *   Save the script.
+
+**2. Launching the Application (Each Time You Run It):**
+
 This requires multiple persistent processes.
 
-**1. Launch AI Browser Instances:**
+*   **A. Launch AI Browser Instances:**
+    *   Use the configured `start_ai_browsers.sh` script.
+    *   Open **three separate terminals**.
+    *   In terminal 1, run: `cd <project_dir> && ./start_ai_browsers.sh chatgpt`
+    *   In terminal 2, run: `cd <project_dir> && ./start_ai_browsers.sh claude`
+    *   In terminal 3, run: `cd <project_dir> && ./start_ai_browsers.sh gemini`
+    *   This will create temporary copies of your configured profile and launch separate Chrome instances for each service, connecting them to the debug ports defined in your `.env` file.
+    *   **Keep these terminals/browsers running.**
+*   **B. Start the FastAPI Server:**
+    *   Open a **new** terminal.
+    *   Navigate to the project directory: `cd <project_dir>`
+    *   Activate the virtual environment: `source .venv/bin/activate`
+    *   Start the server: `uvicorn app.main:app --reload --port 8000`
+    *   Keep this terminal running. Watch for logs confirming connection to the debug ports.
+*   **C. Start ngrok:**
+    *   Open **another** terminal.
+    *   Expose port 8000: `ngrok http 8000`
+    *   **Note the HTTPS URL** provided by ngrok (it should match the one you used during Slack setup).
 
-Use the provided script to launch **separate, logged-in Chrome instances** for each service with remote debugging enabled. The script handles copying your default Chrome profile (`Profile 3` assumed) to a temporary location for isolation.
+**3. Ready!**
 
-*   Open **three separate terminals**.
-*   In terminal 1, run:
-    ```bash
-    ./start_ai_browsers.sh chatgpt
-    ```
-*   In terminal 2, run:
-    ```bash
-    ./start_ai_browsers.sh claude
-    ```
-*   In terminal 3, run:
-    ```bash
-    ./start_ai_browsers.sh gemini
-    ```
-*   **Manual Login:** The *first time* you run this (or if you clear profiles), you **must manually log in** to `chat.openai.com`, `claude.ai`, and `gemini.google.com` in the respective browser windows that appear. The `--user-data-dir` used by the script will persist these logins for future runs.
-*   **Keep these terminals/browsers running.**
-
-*(Note: Ensure the paths `SOURCE_USER_DATA_DIR` and `BACKUP_BASE_DIR` in `start_ai_browsers.sh` are correct for your system if they differ from the defaults.)*
-
-**2. Start the FastAPI Server:**
-
-*   Open a **new** terminal.
-*   Activate the virtual environment: `source .venv/bin/activate`
-*   Start the server:
-    ```bash
-    uvicorn app.main:app --reload --port 8000
-    ```
-*   Keep this terminal running. Watch for logs confirming connection to the debug ports.
-
-**3. Start ngrok:**
-
-*   Open **another** terminal.
-*   Expose port 8000:
-    ```bash
-    ngrok http 8000
-    ```
-*   **Copy the HTTPS URL** provided by ngrok (e.g., `https://<random-string>.ngrok-free.app`).
-
-**4. Configure Slack:**
-
-*   Go to your Slack App -> Event Subscriptions.
-*   Paste the ngrok HTTPS URL + `/slack/events` into the "Request URL" field (e.g., `https://<random-string>.ngrok-free.app/slack/events`). Wait for verification.
-*   Ensure the `message.channels` bot event is subscribed.
-*   Save changes and reinstall the app if needed.
+Your local server is running, connected to your logged-in browser instances, and accessible to Slack via ngrok. You can now proceed to [Usage](#usage).
 
 ## Configuration
 
@@ -170,11 +219,10 @@ Key `.env` variables:
 *   `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`
 *   `OPENAI_API_KEY`
 *   `CHROME_DEBUG_PORT_CHATGPT`, `_CLAUDE`, `_GEMINI` (Must match ports used in step 1)
-*   `TARGET_SLACK_CHANNEL_ID` (Optional: Restrict bot to one channel)
 
 ## Usage
 
-1.  Invite the bot to a desired public channel (or the `TARGET_SLACK_CHANNEL_ID`).
+1.  Invite the bot to a desired public channel.
 2.  Send a message with text **or** an audio file attachment.
 3.  Wait for the bot to reply in a thread with results (links, transcript snippet, errors) and uploaded screenshots.
 
