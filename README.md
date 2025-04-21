@@ -1,4 +1,9 @@
-# AI Chorus: A chorus for your yapping
+# AI Chorus: Yap across all your AI Apps
+
+Do YOU pay for multiple AI apps?
+Do YOU yap to these apps throughout the day?
+Do YOU wish to maximize your value-for-money across these apps? 
+AI Chorus is for YOU.
 
 A locally running application that listens to Slack messages (including audio), transcribes them, and submits the text to ChatGPT, Claude, and Gemini web UIs using Playwright. Posts back links and screenshots to Slack.
 
